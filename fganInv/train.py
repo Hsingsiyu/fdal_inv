@@ -16,12 +16,12 @@ from tensorboardX import SummaryWriter
 
 def main():
     parser = argparse.ArgumentParser(description='Training the in-domain encoder with fDAL')
-    parser.add_argument('--data_root', type=str, default='/home/xsy/FFHQ_256_png/',
+    parser.add_argument('--data_root', type=str, default='/home/xsy/ffhq_256',
                         help='path to training data (.txt path file)')
     parser.add_argument('--image_size', type=int, default=256,
-                        help='the image size in training dataset (defaults; 256)')
+                        help='the image size in training dataset (defaults; 256,)')
     parser.add_argument('--model_name', type=str, default='stylegan2-ffhq-256',
-                        help='the name of the model')
+                        help='the name of the model(defaults:stylegan2-ffhq-256,stylegan2-cat-256,stylegan2-car-512)')
     parser.add_argument('--dataset_name', type=str, default='ffhq',
                         help='the name of the training dataset (defaults; ffhq,car,cats)')
     parser.add_argument('--train_batch_size', type=int, default=4,
@@ -35,11 +35,11 @@ def main():
     parser.add_argument('--save_root', type=str, default='./output/')
     parser.add_argument('--divergence', type=str, default='pearson',help='pearson,kl')
     parser.add_argument('--nepoch', type=int, default=3000)
-    parser.add_argument('--lrHhat', type=int, default=0.00001)
-    parser.add_argument('--lrE', type=int, default=0.0001)
+    parser.add_argument('--lrE', type=int, default=0.00001)
     parser.add_argument('--lrD', type=int, default=0.00001)
+    parser.add_argument('--lrHhat', type=int, default=0.00001)
     parser.add_argument('--adam', type=bool, default=True)
-    parser.add_argument('--D_iters', type=int, default=2)
+    parser.add_argument('--D_iters', type=int, default=1)
     parser.add_argument('--netE', type=str, default='')
     parser.add_argument('--nets', type=str, default='')
     parser.add_argument('--local_rank', type=int, default=0,help='node rank for distributed training')
@@ -55,7 +55,7 @@ def main():
         min_val = -1.0
         max_val = 1.0
         target_type='stroke'
-        split=100 #65000
+        split=35000 #65000
     datasets_args = Config()
 
     loss_args=EasyDict(loss_pix_weight=5.0,loss_w_weight=1,loss_dst_weight=1.0,loss_feat_weight=0.8,loss_id_weight=1) #0.5
@@ -66,7 +66,7 @@ def main():
 
     current_time = datetime.now().strftime('%b%d_%H-%M')
     prefix = 'fDAL-'+args.model_name
-    parm='_clipgrad_bs_%s_epoch%s_regcoef%s_%s_%s_adam%s_DIV_%s'%(args.train_batch_size,args.nepoch,loss_args.loss_pix_weight,loss_args.loss_w_weight,loss_args.loss_dst_weight,args.adam,args.divergence)
+    parm='_%s_bs_%s_epoch%s_regcoef%s_%s_%s_adam%s_DIV_%s'%(args.model_name,args.train_batch_size,args.nepoch,loss_args.loss_pix_weight,loss_args.loss_w_weight,loss_args.loss_dst_weight,args.adam,args.divergence)
     args.save_images = os.path.join(args.save_root, prefix  + current_time+parm, 'save_images')
     args.save_models = os.path.join(args.save_root, prefix + current_time+parm, 'save_models')
     args.save_logs = os.path.join(args.save_root, prefix + current_time+parm, 'save_logs')

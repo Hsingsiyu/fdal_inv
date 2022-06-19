@@ -101,7 +101,7 @@ def training_loop_b(
     same_seeds(2022+config.local_rank)
     epoch_s=0
     E_iterations=0
-    Hhat_iterations=0
+    Ehat_iterations=0
 
     loss_pix_weight=loss_args.loss_pix_weight
     loss_w_weight=loss_args.loss_w_weight
@@ -113,8 +113,8 @@ def training_loop_b(
         torch.distributed.init_process_group(backend='nccl',)  # choose nccl as backend using gpus
         torch.cuda.set_device(config.local_rank)
 
-    train_dataset=ImageDataset(dataset_args,train=True,paired=False)#todo: paired?
-    val_dataset = ImageDataset(dataset_args, train=False)
+    train_dataset=ImageDataset(dataset_args,train=True,paired=False)
+    val_dataset = ImageDataset(dataset_args, train=False,paired=True)
     if config.gpu_ids is not None:
         train_sampler=torch.utils.data.distributed.DistributedSampler(train_dataset)
         train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=config.train_batch_size,sampler=train_sampler,pin_memory=True,drop_last=True)
@@ -154,7 +154,7 @@ def training_loop_b(
         lr_scheduler_Eadv.load_state_dict(checkpoint['schedulerE_adv'])
         lr_scheduler_Discri.load_state_dict(checkpoint['schedulerDiscri'])
     if config.local_rank==0:
-        generator_config = {"imageSize": config.image_size, "dataset": config.dataset_name, "trainingset":dataset_args.split,
+        generator_config = {"imageSize": config.image_size,"Eiters":config.D_iters, "dataset": config.dataset_name, "trainingset":dataset_args.split,
                             "train_bs": config.train_batch_size,"val_bs": config.test_batch_size,"div":config.divergence,"nepoch":config.nepoch,
                             "adam":config.adam,"lr_E":optimizer_E.state_dict()["param_groups"][0]["lr"],
                             "pix_weight":loss_args.loss_pix_weight,"w_weight":loss_args.loss_w_weight,"dst_weight":loss_args.loss_dst_weight,"loss_adv_weight":loss_adv_weight,
@@ -213,13 +213,13 @@ def training_loop_b(
                 loss_all.backward()
                 nn.utils.clip_grad_norm_(E_adv.parameters(), 10)
                 optimizer_Eadv.step()
-                Hhat_iterations += 1
-                if (Hhat_iterations ) % Hhat_lr_args.decay_step == 0:
+                Ehat_iterations += 1
+                if (Ehat_iterations ) % Hhat_lr_args.decay_step == 0:
                     lr_scheduler_Eadv.step()
                 if writer and config.local_rank==0:
-                    writer.add_scalar('maxEhat/dst', dst.item(), global_step=Hhat_iterations)
-                    writer.add_scalar('maxEhat/src', l_s.mean().item(), global_step=Hhat_iterations)
-                    writer.add_scalar('maxEhat/trg', l_t.mean().item(), global_step=Hhat_iterations)
+                    writer.add_scalar('maxEhat/dst', dst.item(), global_step=Ehat_iterations)
+                    writer.add_scalar('maxEhat/src', l_s.mean().item(), global_step=Ehat_iterations)
+                    writer.add_scalar('maxEhat/trg', l_t.mean().item(), global_step=Ehat_iterations)
             ############################
             # (2) Update E,D network
             ############################

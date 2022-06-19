@@ -13,6 +13,9 @@ from torchvision import transforms as trans
 from PIL import Image, ImageDraw
 import math
 import cv2
+import imgaug.augmenters as iaa
+# from imgaug.augmenters.weather.CloudLayer import CloundLayer
+#TODO
 def brush_stroke_mask(img, color=(255,255,255)):
     # input :image,code from: GPEN
     min_num_vertex = 8
@@ -25,7 +28,6 @@ def brush_stroke_mask(img, color=(255,255,255)):
         average_radius = math.sqrt(H*H+W*W) / 20
         mask = Image.new('RGB', (W, H), 0)
         if img is not None: mask = img #Image.fromarray(img)
-
         # for _ in range(np.random.randint(1, 2)):
         num_vertex = np.random.randint(min_num_vertex, max_num_vertex)
         angle_min = mean_angle - np.random.uniform(0, angle_range)#[2*pi/5-2*pi/15]  4/15
@@ -133,7 +135,6 @@ def alpha_rain(img, beta=0.8):
     return rain_result
 
 class ImageDataset(data.Dataset):
-
     def __init__(self, dataset_args,train=True,paired=True):
         self.root=dataset_args.data_root
         self.target_type=dataset_args.target_type
@@ -141,40 +142,65 @@ class ImageDataset(data.Dataset):
         self.split=dataset_args.split
         self.paired=paired
         self.transform = trans.Compose([trans.ToTensor()])
-        self.transform_t=trans.Compose([
-            trans.ToTensor(),
-        ])
-        self.files_s=sorted(glob.glob(self.root+'/src/*.*'))
-        self.files_t=sorted(glob.glob(self.root+'/trg/*.*'))
-        self.source_list = self.collect_image(source=True)
-        self.target_list = self.collect_image(source=False)
+        self.transform_t=self.transform
+        if self.train:
+            self.files_s=sorted(glob.glob(self.root+'/train/src/*.*'))
+            self.files_t=sorted(glob.glob(self.root+'/train/trg/*.*'))
+            self.source_list = self.collect_image(source=True)
+            self.target_list = self.collect_image(source=False)
+        else:
+            self.source_list=sorted(glob.glob(self.root+'/test/*.*'))
+            self.target_list=sorted(glob.glob(self.root+'/test/*.*'))
+
         self.max_val = dataset_args.max_val
         self.min_val = dataset_args.min_val
         self.size = dataset_args.size
+        self.cloud =iaa.CloudLayer(
+                intensity_mean=(196, 255),
+                intensity_freq_exponent=(-2.5, -2.0),
+                intensity_coarse_scale=10,
+                alpha_min=0,
+                alpha_multiplier=(0.25, 0.75),
+                alpha_size_px_max=(2, 8),
+                alpha_freq_exponent=(-2.5, -2.0),
+                sparsity=(0.8, 1.0),
+                density_multiplier=(0.5, 1.0),
+            )
+        meshtemp=np.load('mesh_weight.npy')#[num,256,256]->[256,256,num]
+        self.mesh=meshtemp.transpose(1,2,0)
+        # print(self.mesh.shape)
+        # print(self.mesh.shape)
+        # self.cloud=iaa.RainLayer(
+        #     density=(0.03, 0.14),
+        #     density_uniformity=(0.8, 1.0),
+        #     drop_size=(0.01, 0.02),
+        #     drop_size_uniformity=(0.2, 0.5),
+        #     angle=(-15, 15),
+        #     blur_sigma_fraction=(0.001, 0.001),
+        #     speed=(0.04, 0.20),
+        # )
     def collect_image(self,source=True):
-        image_path_list = []
-        if source:
-            if self.train:
+        if self.train:
+            if source:
                 image_path_list=self.files_s[:int(self.split)]
-            else:
-                image_path_list = self.files_s[int(self.split):]
-        else:
-            if self.train:
+            else: #train target
                 image_path_list = self.files_t[:int(self.split)]
-            else:
-                image_path_list=self.files_t[int(self.split):]
         return image_path_list
 
     def __getitem__(self, index):
         item_s = self.transform(Image.open(self.source_list[index % len(self.source_list)]))
-        if self.paired:
-            img_t = Image.open(self.target_list[index % len(self.files_t)])
-        else:
-            tmp_ind=random.randint(0, len(self.target_list) - 1)
-            img_t = Image.open(self.target_list[tmp_ind%len(self.target_list)])
-        # if self.target_type=='stroke':
-        if index%2:
+        img_t = Image.open(self.target_list[index % len(self.target_list)])
+
+        # TODO: add more type perturb  real world ESRGAN
+        temp_num=index%4
+        if temp_num==0:
             img_t=brush_stroke_mask(img_t)
+        elif temp_num==1:
+            img_t_aug = self.cloud(image=np.array(img_t))
+            img_t = Image.fromarray(np.uint8(img_t_aug))
+        elif temp_num==2:
+            img_t_aug=self.mesh[:,:,np.random.randint(low=2,size=1)]*np.array(img_t)
+            img_t = Image.fromarray(np.uint8(img_t_aug))
         else:
             img_t=np.array(img_t)
             img_t_aug=alpha_rain(img_t)
@@ -192,24 +218,25 @@ class ImageDataset(data.Dataset):
 
 if __name__=='__main__':
     class Config:
-        data_root ='/home/xsy/FFHQ_256_png'
+        data_root ='/home/xsy/datasets/cat_jpg'
         size =256
         min_val = -1.0
         max_val = 1.0
         target_type='stroke'
-        split=65000 #65000
+        split=1000 #65000
     datasets_args = Config()
-    batch_size=256
-    train_dataset = ImageDataset(datasets_args, train=True, paired=False)
+    batch_size=32
+    train_dataset = ImageDataset(datasets_args, train=False, paired=True)
     from torch.utils.data import DataLoader
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     data_iter = iter(train_dataloader)
     data = data_iter.next()
     import torchvision.utils as tvutils
-    # with torch.no_grad():
-        # x=data['x_t']
+    import torch
+    with torch.no_grad():
+        x=data['x_t']
         # writer.add_image("train",x_train,global_step=E_iterations)
-    # tvutils.save_image(tensor=torch.cat([data['x_t'],data['x_s']], dim=0), fp='test.jpg', nrow=16, normalize=True,
-                       # scale_each=True)
-    tvutils.save_image(tensor=data['x_t'], fp='test.jpg', nrow=16, normalize=True,
+    # tvutils.save_image(tensor=torch.cat([data['x_t'],data['x_s']], dim=0), fp='test.jpg', nrow=batch_size, normalize=True,
+    #                    scale_each=True)
+    tvutils.save_image(tensor=data['x_t'], fp='test.jpg', nrow=4, normalize=True,
                        scale_each=True)
