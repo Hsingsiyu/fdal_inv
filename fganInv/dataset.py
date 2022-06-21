@@ -14,10 +14,8 @@ from PIL import Image, ImageDraw
 import math
 import cv2
 import imgaug.augmenters as iaa
-# from imgaug.augmenters.weather.CloudLayer import CloundLayer
-#TODO
 def brush_stroke_mask(img, color=(255,255,255)):
-    # input :image,code from: GPEN
+    # input :image,   code from: GPEN
     min_num_vertex = 8
     max_num_vertex = 10
     mean_angle = 2*math.pi / 5
@@ -199,7 +197,7 @@ class ImageDataset(data.Dataset):
             img_t_aug = self.cloud(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
         elif temp_num==2:
-            img_t_aug=self.mesh[:,:,np.random.randint(low=2,size=1)]*np.array(img_t)
+            img_t_aug=self.mesh[:,:,np.random.randint(low=8,size=1)]*np.array(img_t)
             img_t = Image.fromarray(np.uint8(img_t_aug))
         else:
             img_t=np.array(img_t)

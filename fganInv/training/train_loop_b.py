@@ -59,13 +59,13 @@ def div_loss_(D, real_x):
     return div
 def construct_model(opt):
     G = Generator(size=opt.image_size,style_dim=512,n_mlp=8).cuda()#TODO DDP
-    E = BackboneEncoderFirstStage(num_layers=50,mode='ir_se').cuda()
-    E_adv=BackboneEncoderFirstStage(num_layers=50,mode='ir_se').cuda()
+    E = BackboneEncoderFirstStage(image_size=opt.image_size,num_layers=50,mode='ir_se').cuda()
+    E_adv=BackboneEncoderFirstStage(image_size=opt.image_size,num_layers=50,mode='ir_se').cuda()
     Discri =Discriminator(size=opt.image_size).cuda()
 
     E.apply(weight_init)
     E_adv.apply(lambda self_: self_.reset_parameters() if hasattr(self_, 'reset_parameters') else None)
-    Discri.apply(weight_init)
+    # Discri.apply(weight_init)
 
     if opt.local_rank==0: print(f'Loading pytorch weights from `{opt.model_name}`.')
     checkpoint = torch.load('./models/pretrain/'+opt.model_name+'.pt' , map_location=torch.device('cpu'))
@@ -203,12 +203,12 @@ def training_loop_b(
 
                 loss_all = 0.0
                 dst = torch.mean(l_s) - torch.mean(phistar_gf(l_t))
-                with torch.no_grad():
-                    grad_dst=torch.autograd.grad(outputs=dst,inputs=E_adv.parameters(),create_graph=False,retain_graph=True,allow_unused=True)[0]
-                    gradnorm_dst = torch.norm(grad_dst, dim=None)
-                if gradnorm_dst > 0:
-                    loss_all +=-1*torch.div(input=dst, other=gradnorm_dst.detach())
-
+                # with torch.no_grad():
+                #     grad_dst=torch.autograd.grad(outputs=dst,inputs=E_adv.parameters(),create_graph=False,retain_graph=True,allow_unused=True)[0]
+                #     gradnorm_dst = torch.norm(grad_dst, dim=None)
+                # if gradnorm_dst > 0:
+                #     loss_all +=-1*torch.div(input=dst, other=gradnorm_dst.detach())
+                loss_all+=-1*dst
                 optimizer_Eadv.zero_grad()
                 loss_all.backward()
                 nn.utils.clip_grad_norm_(E_adv.parameters(), 10)
@@ -231,14 +231,15 @@ def training_loop_b(
                 loss_fake = GAN_loss(x_fake, real=False)
                 loss_gp = div_loss_(Discri, x_s)
                 Discri_loss = 1 * loss_real + 1 * loss_fake + 5 * loss_gp
-                with torch.no_grad():
-                    grad_D = torch.autograd.grad(outputs=Discri_loss, inputs= Discri.parameters(),
-                                    create_graph=False, retain_graph=True, allow_unused=True)[0]
-                    gradnorm_D = torch.norm(grad_D, dim=None)
-                if gradnorm_D > 0:
-                    loss_D= torch.div(input=Discri_loss, other=gradnorm_D.detach())
+                # with torch.no_grad():
+                #     grad_D = torch.autograd.grad(outputs=Discri_loss, inputs= Discri.parameters(),
+                #                     create_graph=False, retain_graph=True, allow_unused=True)[0]
+                #     gradnorm_D = torch.norm(grad_D, dim=None)
+                # if gradnorm_D > 0:
+                #     loss_D= torch.div(input=Discri_loss, other=gradnorm_D.detach())
+
             optimizer_Discri.zero_grad()
-            loss_D.backward()
+            Discri_loss.backward()
             optimizer_Discri.step()
             if writer and config.local_rank == 0:
                 writer.add_scalar('minD/loss_real', loss_real.item(), global_step=E_iterations)
