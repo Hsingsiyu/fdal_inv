@@ -1,8 +1,8 @@
 from dataset import ImageDataset
-from models.stylegan import Generator,Discriminator,h_layers
+from models.stylegan import Generator,Discriminator
 from models.e2style_encoder import BackboneEncoderFirstStage
-
-from lpips_pytorch import LPIPS #, lpips
+from models.id_loss import IDLoss
+import lpips
 from training.misc import EasyDict
 
 import os
@@ -46,7 +46,6 @@ def GAN_loss(scores_out, real=True):
 def div_loss_(D, real_x):
     x_ = real_x.requires_grad_(True)
     y_ = D(x_)
-    # cal f'(x)
     grad = autograd.grad(
         outputs=y_,
         inputs=x_,
@@ -60,29 +59,34 @@ def div_loss_(D, real_x):
     return div
 def construct_model(opt):
     G = Generator(size=opt.image_size,style_dim=512,n_mlp=8).cuda()#TODO DDP
-    E = BackboneEncoderFirstStage(num_layers=50,mode='ir_se').cuda()
-    E_adv=BackboneEncoderFirstStage(num_layers=50,mode='ir_se').cuda()
+    E = BackboneEncoderFirstStage(image_size=opt.image_size,num_layers=50,mode='ir_se').cuda()
+    G_adv=Generator(size=opt.image_size,style_dim=512,n_mlp=8).cuda()
+    Discri =Discriminator(size=opt.image_size).cuda()
 
     E.apply(weight_init)
-    E_adv.apply(lambda self_: self_.reset_parameters() if hasattr(self_, 'reset_parameters') else None)
+    # G_adv.apply(lambda self_: self_.reset_parameters() if hasattr(self_, 'reset_parameters') else None)
 
     if opt.local_rank==0: print(f'Loading pytorch weights from `{opt.model_name}`.')
     checkpoint = torch.load('./models/pretrain/'+opt.model_name+'.pt' , map_location=torch.device('cpu'))
 
     G.load_state_dict(checkpoint["g_ema"], strict=False)
-    # latent_avg=torch.load_state_dict(checkpoint["latent_avg"]).detach()
+    G_adv.load_state_dict(checkpoint["g_ema"], strict=False)
+    # G_adv.apply(lambda self_: self_.reset_parameters() if hasattr(self_, 'reset_parameters') else None)
+    # G_adv.conv1.apply(weight_init)
     if opt.local_rank==0: print(f'successfully load G!')
+    Discri.load_state_dict(checkpoint["d"],strict=True)
     if opt.local_rank==0: print(f'successfully load D!')
     if opt.gpu_ids is not None:
         assert len(opt.gpu_ids) > 1
         G = DDP(G, device_ids=[opt.local_rank], broadcast_buffers=False, find_unused_parameters=True)
         E = DDP(E, device_ids=[opt.local_rank], broadcast_buffers=False, find_unused_parameters=True)
-        E_adv = DDP(E_adv, device_ids=[opt.local_rank], broadcast_buffers=False, find_unused_parameters=True)
-        # H_hat = DDP(H_hat, device_ids=[opt.local_rank], broadcast_buffers=False, find_unused_parameters=True)
+        G_adv = DDP(G_adv, device_ids=[opt.local_rank], broadcast_buffers=False, find_unused_parameters=True)
+        Discri = DDP(Discri, device_ids=[opt.local_rank], broadcast_buffers=False, find_unused_parameters=True)
     G.eval()
+    Discri.train()
     E.train()
-    E_adv.train()
-    return G,E,E_adv
+    G_adv.train()
+    return G,E,Discri,G_adv
 def training_loop_c(
         config,
         dataset_args={},
@@ -99,60 +103,63 @@ def training_loop_c(
     same_seeds(2022+config.local_rank)
     epoch_s=0
     E_iterations=0
-    Hhat_iterations=0
+    Ehat_iterations=0
 
     loss_pix_weight=loss_args.loss_pix_weight
     loss_w_weight=loss_args.loss_w_weight
     loss_dst_weight=loss_args.loss_dst_weight
     loss_feat_weight=loss_args.loss_feat_weight
-
+    loss_adv_weight=0.1
+    loss_id_weight=loss_args.loss_id_weight
     if config.gpu_ids is not None:
         torch.distributed.init_process_group(backend='nccl',)  # choose nccl as backend using gpus
         torch.cuda.set_device(config.local_rank)
 
-    # construct dataloader
-    train_dataset=ImageDataset(dataset_args,train=True,paired=True)#todo: paired?
-    val_dataset = ImageDataset(dataset_args, train=False)
+    train_dataset=ImageDataset(dataset_args,train=True,paired=False)
+    val_dataset = ImageDataset(dataset_args, train=False,paired=True)
     if config.gpu_ids is not None:
         train_sampler=torch.utils.data.distributed.DistributedSampler(train_dataset)
-        train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=int(config.train_batch_size/len(config.gpu_ids)),sampler=train_sampler,pin_memory=True,drop_last=True)
-        print(int(config.train_batch_size/len(config.gpu_ids)))
+        train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=config.train_batch_size,sampler=train_sampler,pin_memory=True,drop_last=True)
+
         val_sampler=torch.utils.data.distributed.DistributedSampler(val_dataset)
-        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=int(config.test_batch_size/len(config.gpu_ids)),sampler=val_sampler,pin_memory=True,drop_last=True)
+        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=config.test_batch_size,sampler=val_sampler,pin_memory=True,drop_last=True)
     else:
         train_dataloader = DataLoader(train_dataset, batch_size=config.train_batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=config.test_batch_size, shuffle=False)
 
     # construct model
-    G, E, E_adv=construct_model(config)
-    with torch.no_grad():
-        #_, latent_avg=G([torch.randn(1000,512).cuda()], input_is_latent=False,randomize_noise=True,return_latents=True)
-        latent_out=G.module.style(torch.randn(1000,512).cuda())
+    G, E, Discri, G_adv=construct_model(config)
+
     # setup optimizer
     optimizer_E = torch.optim.Adam(E.parameters(), lr=E_lr_args.learning_rate, **opt_args)
-    optimizer_Eadv = torch.optim.Adam(E_adv.parameters(), lr=E_lr_args.learning_rate, **opt_args)
-    #TODO check
+    optimizer_Gadv = torch.optim.Adam(G_adv.parameters(), lr=Hhat_lr_args.learning_rate, **opt_args)
+    # optimizer_Discri=torch.optim.Adam(Discri.parameters(), lr=D_lr_args.learning_rate, **opt_args)
+
     if config.netE!='':
         with torch.no_grad():
             E.load_state_dict(torch.load(config.netE,map_location=torch.device("cpu")))
     if config.nets!='':
         with torch.no_grad():
             checkpoint=torch.load(config.nets,map_location=torch.device('cpu'))
-        optimizer_Eadv.load_state_dict(checkpoint["optE_adv"])
+        Discri.load_state_dict(checkpoint["Discri"])
+        # optimizer_Discri.load_state_dict(checkpoint["opt_Discri"])
+        optimizer_Gadv.load_state_dict(checkpoint["optG_adv"])
         optimizer_E.load_state_dict(checkpoint["optE"])
         epoch_s=checkpoint["epoch"]
 
     #特别详细的参数选择的记录
+    # lr_scheduler_Discri=torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer_Discri, gamma=D_lr_args.decay_rate,last_epoch=epoch_s-1)
     lr_scheduler_E = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer_E, gamma=E_lr_args.decay_rate,last_epoch=epoch_s-1)
-    lr_scheduler_Eadv=torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer_Eadv, gamma=E_lr_args.decay_rate,last_epoch=epoch_s-1)
+    lr_scheduler_Gadv=torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer_Gadv, gamma=E_lr_args.decay_rate,last_epoch=epoch_s-1)
     if config.nets!='':
         lr_scheduler_E.load_state_dict(checkpoint['schedulerE'])
-        lr_scheduler_Eadv.load_state_dict(checkpoint['schedulerE_adv'])
+        lr_scheduler_Gadv.load_state_dict(checkpoint['schedulerG_adv'])
+        # lr_scheduler_Discri.load_state_dict(checkpoint['schedulerDiscri'])
     if config.local_rank==0:
-        generator_config = {"imageSize": config.image_size, "dataset": config.dataset_name, "trainingset":dataset_args.split,
+        generator_config = {"imageSize": config.image_size,"Eiters":config.D_iters, "dataset": config.dataset_name, "trainingset":dataset_args.split,
                             "train_bs": config.train_batch_size,"val_bs": config.test_batch_size,"div":config.divergence,"nepoch":config.nepoch,
                             "adam":config.adam,"lr_E":optimizer_E.state_dict()["param_groups"][0]["lr"],
-                            "pix_weight":loss_args.loss_pix_weight,"w_weight":loss_args.loss_w_weight,"dst_weight":loss_args.loss_dst_weight,
+                            "pix_weight":loss_args.loss_pix_weight,"w_weight":loss_args.loss_w_weight,"dst_weight":loss_args.loss_dst_weight,"loss_adv_weight":loss_adv_weight,
                             "Edecay_rate":E_lr_args.decay_step,"Ddecay_rate":D_lr_args.decay_step,  "Hhat_decay_rate":Hhat_lr_args.decay_step,
                             }
         with open(os.path.join(config.save_logs, "config.json"), 'w') as gcfg:
@@ -160,8 +167,9 @@ def training_loop_c(
 
     image_snapshot_step = image_snapshot_ticks
 
-    l_func = nn.L1Loss(reduction='none')
-    l_feat=LPIPS(net_type='alex',version='0.1')
+    l_func = nn.L1Loss(reduction='none').cuda()
+    l_feat= lpips.LPIPS(net='alex').cuda()
+    l_id=IDLoss().cuda().eval()
     phistar_gf = lambda t: ConjugateDualFunction(config.divergence).fstarT(t)
     D_iters = config.D_iters
 
@@ -180,110 +188,145 @@ def training_loop_c(
                 x_s = x_s.float().cuda(non_blocking=True)
                 x_t = x_t.float().cuda(non_blocking=True)
                 batch_size = x_t.shape[0]
-                # print(batch_size)
                 ############################
                 # (1) Update D' network
                 ############################
                 w_s = E(x_s)
                 w_t = E(x_t)
+                with torch.no_grad():
+                    xrec_s, _ = G([w_s], input_is_latent=True,randomize_noise=True,return_latents=False)
+                    xrec_t, _ = G([w_t], input_is_latent=True,randomize_noise=True,return_latents=False)
 
-                xrec_s, _ = G([w_s], input_is_latent=True,randomize_noise=True,return_latents=False)
-                xrec_t, _ = G([w_t], input_is_latent=True,randomize_noise=True,return_latents=False)
+                xs_adv, _ = G_adv([w_s], input_is_latent=True,randomize_noise=True,return_latents=False)
+                xt_adv, _ = G_adv([w_t], input_is_latent=True,randomize_noise=True,return_latents=False)
 
-                w_s_adv=E_adv(x_s)
-                w_t_adv=E_adv(x_t)
-
-                l_s = l_func(w_s_adv, w_s)
-                l_t = l_func(w_t_adv, w_t)
+                l_s = l_func(xrec_s, xs_adv)
+                l_t = l_func(xrec_t, xt_adv)
 
                 loss_all = 0.0
                 dst = torch.mean(l_s) - torch.mean(phistar_gf(l_t))
-                grad_dst=torch.autograd.grad(outputs=dst,inputs=E_adv.parameters(),create_graph=False,retain_graph=True,allow_unused=True)[0]
-                gradnorm_dst = torch.norm(grad_dst, dim=None)
-                if gradnorm_dst > 0:
-                    loss_all +=-1*torch.div(input=dst, other=gradnorm_dst.detach())
-
-                optimizer_Eadv.zero_grad()
+                loss_all+=-1*dst
+                optimizer_Gadv.zero_grad()
                 loss_all.backward()
-                nn.utils.clip_grad_norm_(E_adv.parameters(), 10)
-                # nn.utils.clip_grad_norm_(Discri.parameters(), 10)
-                optimizer_Eadv.step()
-                Hhat_iterations += 1
-                if (Hhat_iterations ) % Hhat_lr_args.decay_step == 0:
-                    lr_scheduler_Eadv.step()
+                nn.utils.clip_grad_norm_(G_adv.parameters(), 10)
+                optimizer_Gadv.step()
+                Ehat_iterations += 1
+                if (Ehat_iterations ) % Hhat_lr_args.decay_step == 0:
+                    lr_scheduler_Gadv.step()
                 if writer and config.local_rank==0:
-                    writer.add_scalar('max/dst', dst.item(), global_step=Hhat_iterations)
-                    writer.add_scalar('max/src', l_s.mean().item(), global_step=Hhat_iterations)
-                    writer.add_scalar('max/trg', l_t.mean().item(), global_step=Hhat_iterations)
+                    writer.add_scalar('maxEhat/dst', dst.item(), global_step=Ehat_iterations)
+                    writer.add_scalar('maxEhat/src', l_s.mean().item(), global_step=Ehat_iterations)
+                    writer.add_scalar('maxEhat/trg', l_t.mean().item(), global_step=Ehat_iterations)
             ############################
-            # (2) Update E network
+            # (2) Update E,D network
             ############################
-            w_s=E(x_s)
-            w_t=E(x_t)
+            # Discri_loss=0
+            # if loss_adv_weight>0:
+            #     x_real=Discri(x_s)
+            #     x_fake=Discri(xrec_s.detach())
+            #     loss_real = GAN_loss(x_real, real=True)
+            #     loss_fake = GAN_loss(x_fake, real=False)
+            #     loss_gp = div_loss_(Discri, x_s)
+            #     Discri_loss = 1 * loss_real + 1 * loss_fake + 5 * loss_gp
+            #
+            # optimizer_Discri.zero_grad()
+            # Discri_loss.backward()
+            # optimizer_Discri.step()
+            # if writer and config.local_rank == 0:
+            #     writer.add_scalar('minD/loss_real', loss_real.item(), global_step=E_iterations)
+            #     writer.add_scalar('minD/loss_fake', loss_fake.item(), global_step=E_iterations)
+            #     writer.add_scalar('minD/loss_gp', loss_gp.item(), global_step=E_iterations)
+            #     writer.add_scalar('minD/loss', Discri_loss.item(), global_step=E_iterations)
+
+            w_s = E(x_s)
+            w_t = E(x_t)
+
+            xs_adv, _ = G_adv([w_s], input_is_latent=True, randomize_noise=True, return_latents=False)
+            xt_adv, _ = G_adv([w_t], input_is_latent=True, randomize_noise=True, return_latents=False)
 
             xrec_s, _ = G([w_s], input_is_latent=True, randomize_noise=True, return_latents=False)
             xrec_t, _ = G([w_t], input_is_latent=True, randomize_noise=True, return_latents=False)
 
-            w_s_adv = E_adv(x_s)
-            w_t_adv = E_adv(x_t)
-
-            l_s = l_func(w_s_adv, w_s)
-            l_t = l_func(w_t_adv, w_t)
+            l_s = l_func(xrec_s, xs_adv)
+            l_t = l_func(xrec_t, xt_adv)
             loss_all = 0.
+            if loss_id_weight>0:
+                loss_id = l_id(y_hat=xrec_s,y=x_s)
+                with torch.no_grad():
+                    grad_id= torch.autograd.grad(outputs=loss_id, inputs=E.parameters(),
+                                                 create_graph=False, retain_graph=True, allow_unused=True)[0]
+                    gradnorm_id= torch.norm(grad_id, dim=None)
+                if gradnorm_id > 0:
+                    loss_all += torch.div(input=loss_id, other=gradnorm_id.detach())
 
             if loss_feat_weight>0:
-                loss_feat =l_feat(x_s,xrec_s)[0]
-                grad_f = torch.autograd.grad(outputs=loss_feat, inputs=E.parameters(),
+                loss_feat =l_feat(x_s,xrec_s).mean()
+                with torch.no_grad():
+                    grad_f = torch.autograd.grad(outputs=loss_feat, inputs=E.parameters(),
                                              create_graph=False, retain_graph=True, allow_unused=True)[0]
-                gradnorm_f = torch.norm(grad_f, dim=None)
+                    gradnorm_f = torch.norm(grad_f, dim=None)
                 if gradnorm_f > 0:
                     loss_all += torch.div(input=loss_feat, other=gradnorm_f.detach())
+
             if loss_pix_weight>0:
                 task_loss_pix = mytask_loss_(x_s.detach(), xrec_s)  # L(x_s,G(E(x_s)))
-                grad_pix = torch.autograd.grad(outputs=task_loss_pix, inputs=E.parameters(),
+                with torch.no_grad():
+                    grad_pix = torch.autograd.grad(outputs=task_loss_pix, inputs=E.parameters(),
                                              create_graph=False, retain_graph=True, allow_unused=True)[0]
-                gradnorm_pix= torch.norm(grad_pix, dim=None)
+                    gradnorm_pix= torch.norm(grad_pix, dim=None)
                 if gradnorm_pix > 0:
                     loss_all += torch.div(input=task_loss_pix, other=gradnorm_pix.detach())
 
+            if loss_adv_weight>0:
+                x_adv = Discri(xrec_s)
+                loss_adv = GAN_loss(x_adv, real=True)
+                with torch.no_grad():
+                    grad_adv=torch.autograd.grad(outputs=loss_adv,inputs=E.parameters(),create_graph=False,retain_graph=True,allow_unused=True)[0]
+                    gradnorm_adv = torch.norm(grad_adv, dim=None)
+                if gradnorm_adv > 0:
+                    loss_all += torch.div(input=loss_adv, other=gradnorm_adv.detach())
             dst =  torch.mean(l_s) - torch.mean(phistar_gf(l_t))
-            grad_dst = \
-            torch.autograd.grad(outputs=dst, inputs=E.parameters(), create_graph=False, retain_graph=True,
-                                allow_unused=True)[0]
-            gradnorm_dst = torch.norm(grad_dst, dim=None)
+            with torch.no_grad():
+                grad_dst = \
+                torch.autograd.grad(outputs=dst, inputs=E.parameters(), create_graph=False, retain_graph=True,
+                                    allow_unused=True)[0]
+                gradnorm_dst = torch.norm(grad_dst, dim=None)
             if gradnorm_dst > 0:
                 loss_all += torch.div(input=dst, other=gradnorm_dst.detach())
-
+            # loss_all+=dst
             optimizer_E.zero_grad()
-            # optimizer_H.zero_grad()
             loss_all.backward()
-            # nn.utils.clip_grad_norm_(H.parameters(), 10)
-            nn.utils.clip_grad_norm_(E.parameters(), 10)
+            nn.utils.clip_grad_norm_(E.parameters(), 20)
             optimizer_E.step()
-            # optimizer_H.step()
 
             if writer and config.local_rank==0:
-                writer.add_scalar('min/pixel', task_loss_pix.item(), global_step=E_iterations)
-                writer.add_scalar('min/dst', dst.item(), global_step=E_iterations)
-                writer.add_scalar('min/src', l_s.mean().item(), global_step=E_iterations)
-                writer.add_scalar('min/trg', l_t.mean().item(), global_step=E_iterations)
-                writer.add_scalar('min/feat',loss_feat.item(),global_step=E_iterations)
+                writer.add_scalar('minE/adv', loss_adv.item(), global_step=E_iterations)
+                writer.add_scalar('minE/pixel', task_loss_pix.item(), global_step=E_iterations)
+                writer.add_scalar('minE/ID',loss_id.item(), global_step=E_iterations)
+                writer.add_scalar('minE/dst', dst.item(), global_step=E_iterations)
+                writer.add_scalar('minE/src', l_s.mean().item(), global_step=E_iterations)
+                writer.add_scalar('minE/trg', l_t.mean().item(), global_step=E_iterations)
+                writer.add_scalar('minE/feat',loss_feat.item(),global_step=E_iterations)
+
                 writer.add_scalar('gradnorm/feat',gradnorm_f.item(),global_step=E_iterations)
+                writer.add_scalar('gradnorm/adv', gradnorm_adv.item(), global_step=E_iterations)
                 writer.add_scalar('gradnorm/pixel', gradnorm_pix.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/ID',gradnorm_id.item(), global_step=E_iterations)
                 writer.add_scalar('gradnorm/dst', gradnorm_dst.item(), global_step=E_iterations)
 
             if  config.local_rank==0:
-                log_message= f"[Task Loss:(pixel){task_loss_pix.cpu().detach().numpy():.3f},lpips {loss_feat.cpu().detach().numpy()}" \
+                log_message= f"[Task Loss:(pixel){task_loss_pix.cpu().detach().numpy():.3f},lpips {loss_feat.cpu().detach().numpy():.3f}" \
                              f", Fdal Loss:{dst.cpu().detach().numpy():.3f},src:{l_s.mean().cpu().detach().numpy():.3f},trg:{l_t.mean().cpu().detach().numpy():.3f}] "
             if logger and config.local_rank==0 :
                 logger.debug(f'Epoch:{epoch:03d}, '
                              f'E_Step:{i:04d}, '
-                             f'Dlr:{optimizer_Eadv.state_dict()["param_groups"][0]["lr"]:.2e}, '
+                             f'Dlr:{optimizer_Gadv.state_dict()["param_groups"][0]["lr"]:.2e}, '
                              f'Elr:{optimizer_E.state_dict()["param_groups"][0]["lr"]:.2e}, '
+                             # f'Dhatlr:{optimizer_Discri.state_dict()["param_groups"][0]["lr"]:.2e}, '
                              f'{log_message}')
             if (E_iterations % image_snapshot_step == 0) and config.local_rank==0:
                 with torch.no_grad():
-                    x_train = torch.cat([x_s, xrec_s, x_t, xrec_t], dim=0)
+                    x_train = torch.cat([x_s, xrec_s,xs_adv, x_t, xrec_t,xt_adv], dim=0)
                 save_filename = f'train_E_iterations_{E_iterations:05d}.png'
                 save_filepath = os.path.join(config.save_images, save_filename)
                 tvutils.save_image(tensor=x_train, fp=save_filepath, nrow=batch_size, normalize=True,
@@ -318,16 +361,21 @@ def training_loop_c(
             E_iterations += 1
             if (E_iterations) % E_lr_args.decay_step == 0 :
                 lr_scheduler_E.step()
+                # lr_scheduler_Discri.step()
 
-        if (epoch+1) %5 == 0 and config.local_rank==0:
+
+        if (epoch+1) %500 == 0 and config.local_rank==0:
             save_filename = f'styleganinv_encoder_epoch_{epoch+1:03d}.pth'
             save_filepath = os.path.join(config.save_models, save_filename)
             torch.save(E.state_dict(), save_filepath)
-            checkpoint = {"E_adv":E_adv.state_dict(),
+            checkpoint = {"G_adv":G_adv.state_dict(),
+                          "Discri":Discri.state_dict(),
+                          # "opt_Discri":optimizer_Discri.state_dict(),
                           "optE": optimizer_E.state_dict(),
-                          "optE_adv": optimizer_Eadv.state_dict(),
+                          "optG_adv": optimizer_Gadv.state_dict(),
+                          "schedulerDiscri":lr_scheduler_Discri.state_dict(),
                           "schedulerE": lr_scheduler_E.state_dict(),
-                          "schedulerE_adv": lr_scheduler_Eadv.state_dict(),
+                          "schedulerG_adv": lr_scheduler_Gadv.state_dict(),
                           "epoch": epoch + 1}
             path_checkpoint = "{0}/checkpoint_{1}_epoch.pkl".format(config.save_models, epoch + 1)
             torch.save(obj=checkpoint, f=path_checkpoint)

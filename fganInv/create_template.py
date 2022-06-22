@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy
 import numpy as np
 import cv2
-num=4
+num=8
 temp_mat=np.zeros((num,256,256))
 for i in range(num):
     mesh=cv2.imread(f'./mesh-template/0{i+1}.png',-1)
@@ -17,7 +17,7 @@ for i in range(num):
     # cv2.imshow('gray2',gray)
 
 
-# np.save('mesh_weight.npy',temp_mat)
+np.save('mesh_weight.npy',temp_mat)
 # # cv2.imshow('gray2',gray)
 # # cv2.destoryAllWindows()
 # # ret,img=cv2.threshold(mesh,127,255,cv2.THRESH_BINARY)

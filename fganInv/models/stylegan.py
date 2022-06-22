@@ -763,25 +763,31 @@ class h_layers(nn.Module):
         out = self.convs(input)
         return out
 if __name__=='__main__':
-    G=Generator([512,384],512,8)
+    # G=Generator([512,384],512,8)
     # # print(G)
 
-    checkpoint_path='/home/xsy/SOTAgan_inversion/pretainmodels/stylegan2-g-car-512-384.pt'
+    checkpoint_path='/home/xsy/invganV2/fganInv/models/pretrain/stylegan2-cat-256.pt'
+    checkpoint = torch.load(checkpoint_path , map_location=torch.device('cpu'))
+
+    # Discri = Discriminator(size=512).cuda()
+    # Discri.load_state_dict(checkpoint_path["d"], strict=True)
+    for key in checkpoint.keys():
+        print(key)
     # import pickle
     # with open(checkpoint_path, "rb") as f:
     #     generator, discriminator, g_ema = pickle.load(f)
     # print(g_ema.output_shape[2])
-    ckpt = torch.load((checkpoint_path), map_location='cpu')
+    # ckpt = torch.load((checkpoint_path), map_location='cpu')
     # print(ckpt['g_ema'].output_shape[2])
     # # print(ckpt)
-    G.load_state_dict(ckpt['g_ema'],strict=False)
+    # G.load_state_dict(ckpt['g_ema'],strict=False)
     # print(G)
     # # input=torch.randn(1,18,512)
-    input=torch.randn(1,1,512)
+    # input=torch.randn(1,1,512)
     #
     # input = torch.randn(1,512)
-    images,_=G([input],return_latents=True,input_is_latent=False,randomize_noise=True,)
-    print(images.shape)
+    # images,_=G([input],return_latents=True,input_is_latent=False,randomize_noise=True,)
+    # print(images.shape)
     # input=torch.randn(1,18,512)
     # images,_ =G([input],return_latents=True,input_is_latent=True,randomize_noise=False,)
     import torchvision.utils as tvutils

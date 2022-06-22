@@ -190,15 +190,15 @@ class ImageDataset(data.Dataset):
         img_t = Image.open(self.target_list[index % len(self.target_list)])
 
         # TODO: add more type perturb  real world ESRGAN
-        temp_num=index%4
+        temp_num=index%3
         if temp_num==0:
             img_t=brush_stroke_mask(img_t)
         elif temp_num==1:
             img_t_aug = self.cloud(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
-        elif temp_num==2:
-            img_t_aug=self.mesh[:,:,np.random.randint(low=8,size=1)]*np.array(img_t)
-            img_t = Image.fromarray(np.uint8(img_t_aug))
+        # elif temp_num==2:
+        #     img_t_aug=self.mesh[:,:,np.random.randint(low=8,size=1)]*np.array(img_t)
+        #     img_t = Image.fromarray(np.uint8(img_t_aug))
         else:
             img_t=np.array(img_t)
             img_t_aug=alpha_rain(img_t)

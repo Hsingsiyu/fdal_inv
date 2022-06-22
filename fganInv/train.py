@@ -96,7 +96,7 @@ def main():
     elif args.configc == True:
         print('config c')
         training_loop_c(args, datasets_args, E_lr_args, D_lr_args, H_lr_args, opt_args, loss_args, logger, writer,
-                        image_snapshot_ticks=500, max_epoch=args.nepoch)
+                        image_snapshot_ticks=300, max_epoch=args.nepoch)
     else:
         training_loop(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
 
