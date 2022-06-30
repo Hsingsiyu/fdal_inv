@@ -10,6 +10,7 @@ from training.train_loop import training_loop
 from training.train_loop_a import training_loop_a
 from training.train_loop_b import training_loop_b
 from training.train_loop_c import training_loop_c
+from training.train_loop_d import training_loop_d
 
 from utils.logger import setup_logger
 from tensorboardX import SummaryWriter
@@ -24,7 +25,7 @@ def main():
                         help='the name of the model(defaults:stylegan2-ffhq-256,stylegan2-cat-256,stylegan2-car-512)')
     parser.add_argument('--dataset_name', type=str, default='ffhq',
                         help='the name of the training dataset (defaults; ffhq,car,cats)')
-    parser.add_argument('--train_batch_size', type=int, default=4,
+    parser.add_argument('--train_batch_size', type=int, default=6,
                         help='training batch size for per gpu')
     parser.add_argument('--test_batch_size', type=int, default=16,
                         help='training batch size for per gpu')
@@ -46,6 +47,7 @@ def main():
     parser.add_argument('--configa', action='store_true',default=False,help='')
     parser.add_argument('--configb', action='store_true',default=False,help='')
     parser.add_argument('--configc', action='store_true',default=False,help='')
+    parser.add_argument('--configd', action='store_true',default=False,help='')
 
     args = parser.parse_args()
 
@@ -58,7 +60,7 @@ def main():
         split=35000 #65000
     datasets_args = Config()
 
-    loss_args=EasyDict(loss_pix_weight=5.0,loss_w_weight=1,loss_dst_weight=1.0,loss_feat_weight=0.8,loss_id_weight=1) #0.5
+    loss_args=EasyDict(loss_pix_weight=2,loss_w_weight=0.005,loss_dst_weight=5,loss_feat_weight=0.8,loss_id_weight=0.5) #0.5
     opt_args = EasyDict(betas=(0.9, 0.99), eps=1e-8)
     E_lr_args = EasyDict(learning_rate=args.lrE, decay_step=6000, decay_rate=0.8, stair=False)
     D_lr_args = EasyDict(learning_rate=args.lrD, decay_step=6000, decay_rate=0.8, stair=False)
@@ -96,6 +98,10 @@ def main():
     elif args.configc == True:
         print('config c')
         training_loop_c(args, datasets_args, E_lr_args, D_lr_args, H_lr_args, opt_args, loss_args, logger, writer,
+                        image_snapshot_ticks=200, max_epoch=args.nepoch)
+    elif args.configd == True:
+        print('config d')
+        training_loop_d(args, datasets_args, E_lr_args, D_lr_args, H_lr_args, opt_args, loss_args, logger, writer,
                         image_snapshot_ticks=300, max_epoch=args.nepoch)
     else:
         training_loop(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
