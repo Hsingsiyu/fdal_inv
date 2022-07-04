@@ -679,8 +679,8 @@ class Discriminator(nn.Module):
         out = self.convs(input)
 
         batch, channel, height, width = out.shape
-        # group = min(batch, self.stddev_group)
-        group=batch
+        group = min(batch, self.stddev_group)
+        # group=batch
         stddev = out.view(
             group, -1, self.stddev_feat, channel // self.stddev_feat, height, width
         )
@@ -696,84 +696,34 @@ class Discriminator(nn.Module):
 
         return out
 
-class h_layers(nn.Module):
-    def __init__(self, size, channel_multiplier=2, blur_kernel=[1, 3, 3, 1]):
-        super().__init__()
-        channels = {
-            4: 512,
-            8: 512,
-            16: 512,
-            32: 512,
-            64: 256 * channel_multiplier,
-            128: 128 * channel_multiplier,
-            256: 64 * channel_multiplier,
-            512: 32 * channel_multiplier,
-            1024: 16 * channel_multiplier,
-        }
 
-        convs = [ConvLayer(3, channels[size], 1)]
-
-        log_size = int(math.log(size, 2))
-
-        in_channel = channels[size]
-
-        for i in range(log_size, log_size-2, -1):
-            out_channel = channels[2 ** (i - 1)]
-
-            convs.append(ResBlock(in_channel, out_channel, blur_kernel))
-
-            in_channel = out_channel
-
-        self.convs = nn.Sequential(*convs)
-
-    def forward(self, input):
-        out = self.convs(input)
-        return out
-
-class h_layers(nn.Module):
-    def __init__(self, size, channel_multiplier=2, blur_kernel=[1, 3, 3, 1]):
-        super().__init__()
-        channels = {
-            4: 512,
-            8: 512,
-            16: 512,
-            32: 512,
-            64: 256 * channel_multiplier,
-            128: 128 * channel_multiplier,
-            256: 64 * channel_multiplier,
-            512: 32 * channel_multiplier,
-            1024: 16 * channel_multiplier,
-        }
-
-        convs = [ConvLayer(3, channels[size], 1)]
-
-        log_size = int(math.log(size, 2))
-
-        in_channel = channels[size]
-
-        for i in range(log_size, log_size-1, -1):
-            out_channel = channels[2 ** (i - 1)]
-
-            convs.append(ResBlock(in_channel, out_channel, blur_kernel))
-
-            in_channel = out_channel
-
-        self.convs = nn.Sequential(*convs)
-
-    def forward(self, input):
-        out = self.convs(input)
-        return out
 if __name__=='__main__':
     # G=Generator([512,384],512,8)
     # # print(G)
 
-    checkpoint_path='/home/xsy/invganV2/fganInv/models/pretrain/stylegan2-cat-256.pt'
+    checkpoint_path='/home/xsy/invganV2/fganInv/models/pretrain/stylegan2-car-512.pt'
     checkpoint = torch.load(checkpoint_path , map_location=torch.device('cpu'))
 
-    # Discri = Discriminator(size=512).cuda()
+    # Discri = Discriminator(size=512)
+    # input = torch.randn(8, 3,512,384)
+    # print(Discri(input).shape)
+    G=Generator(size=512,style_dim=512,n_mlp=8)
+    G.load_state_dict(checkpoint["g_ema"], strict=False)
+    w_s=torch.randn(1,512)
+    x1, _ = G([w_s], input_is_latent=False, randomize_noise=True, return_latents=False)
+    x2, _ = G([w_s], input_is_latent=False, randomize_noise=True, return_latents=False)
+    x3, _ = G([w_s], input_is_latent=False, randomize_noise=False, return_latents=False)
+    x4, _ = G([w_s], input_is_latent=False, randomize_noise=False, return_latents=False)
+
+    # print(xrec_s.shape) #[1,3,512,512]
+    import torchvision.utils as tvutils
+    with torch.no_grad():
+        tvutils.save_image(tensor=torch.cat([x1,x2,x3,x4],dim=0), fp='test_fake.png', nrow=4, normalize=True,
+                       scale_each=True)
     # Discri.load_state_dict(checkpoint_path["d"], strict=True)
-    for key in checkpoint.keys():
-        print(key)
+    # for key in checkpoint.keys():
+    #     print(key)
+
     # import pickle
     # with open(checkpoint_path, "rb") as f:
     #     generator, discriminator, g_ema = pickle.load(f)
@@ -791,7 +741,6 @@ if __name__=='__main__':
     # print(images.shape)
     # input=torch.randn(1,18,512)
     # images,_ =G([input],return_latents=True,input_is_latent=True,randomize_noise=False,)
-    import torchvision.utils as tvutils
     # with torch.no_grad():
     #     tvutils.save_image(tensor=images, fp='TEST0001.png', nrow=1, normalize=True, scale_each=True)
     # print('successfully load...')
