@@ -130,9 +130,8 @@ def training_loop_c(
     # setup optimizer
     optimizer_E = torch.optim.Adam(E.parameters(), lr=E_lr_args.learning_rate, **opt_args)
     # optimizer_E = Ranger(list(E.parameters()), lr=E_lr_args.learning_rate)
-    # optimizer_Gadv = torch.optim.SGD(G_adv.parameters(), lr=Hhat_lr_args.learning_rate,  momentum=0.9, nesterov=True)
-    optimizer_Gadv=torch.optim.Adam(G_adv.parameters(), lr=D_lr_args.learning_rate, **opt_args)
-
+    optimizer_Gadv = torch.optim.SGD(G_adv.parameters(), lr=Hhat_lr_args.learning_rate,  momentum=0.9, nesterov=True)
+    # optimizer_Gadv=torch.optim.Adam(G_adv.parameters(), lr=D_lr_args.learning_rate, **opt_args)
     optimizer_Discri=torch.optim.Adam(Discri.parameters(), lr=D_lr_args.learning_rate, **opt_args)
 
     if config.netE!='':
@@ -256,54 +255,54 @@ def training_loop_c(
             loss_all = 0.
             if loss_id_weight>0:
                 loss_id = l_id(y_hat=xrec_s,y=x_s)
-                loss_all+=loss_id_weight*loss_id
-                # with torch.no_grad():
-                #     grad_id= torch.autograd.grad(outputs=loss_id, inputs=E.parameters(),
-                #                                  create_graph=False, retain_graph=True, allow_unused=True)[0]
-                #     gradnorm_id= torch.norm(grad_id, dim=None)
-                # if gradnorm_id > 0:
-                #     loss_all += torch.div(input=loss_id, other=gradnorm_id.detach())
+                # loss_all+=loss_id_weight*loss_id
+                with torch.no_grad():
+                    grad_id= torch.autograd.grad(outputs=loss_id, inputs=E.parameters(),
+                                                 create_graph=False, retain_graph=True, allow_unused=True)[0]
+                    gradnorm_id= torch.norm(grad_id, dim=None)
+                if gradnorm_id > 0:
+                    loss_all += torch.div(input=loss_id, other=gradnorm_id.detach())
 
             if loss_feat_weight>0:
                 loss_feat =l_feat(x_s,xrec_s).mean()
-                loss_all += loss_feat_weight * loss_feat
-                # with torch.no_grad():
-                #     grad_f = torch.autograd.grad(outputs=loss_feat, inputs=E.parameters(),
-                #                              create_graph=False, retain_graph=True, allow_unused=True)[0]
-                #     gradnorm_f = torch.norm(grad_f, dim=None)
-                # if gradnorm_f > 0:
-                #     loss_all += torch.div(input=loss_feat, other=gradnorm_f.detach())
+                # loss_all += loss_feat_weight * loss_feat
+                with torch.no_grad():
+                    grad_f = torch.autograd.grad(outputs=loss_feat, inputs=E.parameters(),
+                                             create_graph=False, retain_graph=True, allow_unused=True)[0]
+                    gradnorm_f = torch.norm(grad_f, dim=None)
+                if gradnorm_f > 0:
+                    loss_all += torch.div(input=loss_feat, other=gradnorm_f.detach())
 
             if loss_pix_weight>0:
                 task_loss_pix = l_pix(x_s.detach(), xrec_s)  # L(x_s,G(E(x_s)))
-                loss_all+=task_loss_pix*loss_pix_weight
-                # with torch.no_grad():
-                #     grad_pix = torch.autograd.grad(outputs=task_loss_pix, inputs=E.parameters(),
-                #                              create_graph=False, retain_graph=True, allow_unused=True)[0]
-                #     gradnorm_pix= torch.norm(grad_pix, dim=None)
-                # if gradnorm_pix > 0:
-                #     loss_all += torch.div(input=task_loss_pix, other=gradnorm_pix.detach())
+                # loss_all+=task_loss_pix*loss_pix_weight
+                with torch.no_grad():
+                    grad_pix = torch.autograd.grad(outputs=task_loss_pix, inputs=E.parameters(),
+                                             create_graph=False, retain_graph=True, allow_unused=True)[0]
+                    gradnorm_pix= torch.norm(grad_pix, dim=None)
+                if gradnorm_pix > 0:
+                    loss_all += torch.div(input=task_loss_pix, other=gradnorm_pix.detach())
 
             if loss_adv_weight>0:
                 x_adv = Discri(xrec_s)
                 loss_adv = GAN_loss(x_adv, real=True)
-                loss_all+=loss_adv_weight*loss_adv
-                # with torch.no_grad():
-                #     grad_adv=torch.autograd.grad(outputs=loss_adv,inputs=E.parameters(),create_graph=False,retain_graph=True,allow_unused=True)[0]
-                #     gradnorm_adv = torch.norm(grad_adv, dim=None)
-                # if gradnorm_adv > 0:
-                #     loss_all += torch.div(input=loss_adv, other=gradnorm_adv.detach())
+                # loss_all+=loss_adv_weight*loss_adv
+                with torch.no_grad():
+                    grad_adv=torch.autograd.grad(outputs=loss_adv,inputs=E.parameters(),create_graph=False,retain_graph=True,allow_unused=True)[0]
+                    gradnorm_adv = torch.norm(grad_adv, dim=None)
+                if gradnorm_adv > 0:
+                    loss_all += torch.div(input=loss_adv, other=gradnorm_adv.detach())
             l_s = l_func(xrec_s, xs_adv)
             l_t = l_func(xrec_t, xt_adv)
             dst =  torch.mean(l_s) - torch.mean(phistar_gf(l_t))
-            # with torch.no_grad():
-            #     grad_dst = \
-            #     torch.autograd.grad(outputs=dst, inputs=E.parameters(), create_graph=False, retain_graph=True,
-            #                         allow_unused=True)[0]
-            #     gradnorm_dst = torch.norm(grad_dst, dim=None)
-            # if gradnorm_dst > 0:
-            #     loss_all += torch.div(input=dst, other=gradnorm_dst.detach())
-            loss_all+=loss_dst_weight*dst
+            with torch.no_grad():
+                grad_dst = \
+                torch.autograd.grad(outputs=dst, inputs=E.parameters(), create_graph=False, retain_graph=True,
+                                    allow_unused=True)[0]
+                gradnorm_dst = torch.norm(grad_dst, dim=None)
+            if gradnorm_dst > 0:
+                loss_all += torch.div(input=torch.abs(dst), other=gradnorm_dst.detach())
+            # loss_all+=loss_dst_weight*torch.abs(dst)
             optimizer_E.zero_grad()
             loss_all.backward()
             optimizer_E.step()
@@ -316,11 +315,11 @@ def training_loop_c(
                 writer.add_scalar('minE/src', l_s.mean().item(), global_step=E_iterations)
                 writer.add_scalar('minE/trg', l_t.mean().item(), global_step=E_iterations)
                 writer.add_scalar('minE/feat',loss_feat.item(),global_step=E_iterations)
-                # writer.add_scalar('gradnorm/feat',gradnorm_f.item(),global_step=E_iterations)
-                # writer.add_scalar('gradnorm/adv', gradnorm_adv.item(), global_step=E_iterations)
-                # writer.add_scalar('gradnorm/pixel', gradnorm_pix.item(), global_step=E_iterations)
-                # writer.add_scalar('gradnorm/ID',gradnorm_id.item(), global_step=E_iterations)
-                # writer.add_scalar('gradnorm/dst', gradnorm_dst.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/feat',gradnorm_f.item(),global_step=E_iterations)
+                writer.add_scalar('gradnorm/adv', gradnorm_adv.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/pixel', gradnorm_pix.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/ID',gradnorm_id.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/dst', gradnorm_dst.item(), global_step=E_iterations)
 
             if  config.local_rank==0:
                 log_message= f"[Task Loss:(pixel){task_loss_pix.cpu().detach().numpy():.3f},lpips {loss_feat.cpu().detach().numpy():.3f}" \

@@ -1,4 +1,3 @@
-#todo:  f' LPIPS pretrained network
 import torchvision.utils
 from dataset import ImageDataset
 from models.stylegan import Generator,Discriminator
@@ -21,7 +20,6 @@ import itertools
 import random
 import torch.nn.functional as F
 import torch.autograd as autograd
-from training.ranger  import Ranger
 def same_seeds(seed):
     random.seed(seed)
     torch.manual_seed(seed)
@@ -260,27 +258,59 @@ def training_loop_d(
             loss_all = 0.
             if loss_id_weight>0:
                 loss_id = l_id(y_hat=xrec_s,y=x_s)
-                loss_all+=loss_id_weight*loss_id
+                # loss_all+=loss_id_weight*loss_id
+                with torch.no_grad():
+                    grad_id= torch.autograd.grad(outputs=loss_id, inputs=E.parameters(),
+                                                 create_graph=False, retain_graph=True, allow_unused=True)[0]
+                    gradnorm_id= torch.norm(grad_id, dim=None)
+                if gradnorm_id > 0:
+                    loss_all += torch.div(input=loss_id, other=gradnorm_id.detach())
 
             if loss_feat_weight>0:
                 loss_feat =l_feat(x_s,xrec_s).mean()
-                loss_all += loss_feat_weight * loss_feat
+                # loss_all += loss_feat_weight * loss_feat
+                with torch.no_grad():
+                    grad_f = torch.autograd.grad(outputs=loss_feat, inputs=E.parameters(),
+                                             create_graph=False, retain_graph=True, allow_unused=True)[0]
+                    gradnorm_f = torch.norm(grad_f, dim=None)
+                if gradnorm_f > 0:
+                    loss_all += torch.div(input=loss_feat, other=gradnorm_f.detach())
 
             if loss_pix_weight>0:
                 task_loss_pix = l_pix(x_s.detach(), xrec_s)  # L(x_s,G(E(x_s)))
-                loss_all+=task_loss_pix*loss_pix_weight
+                # loss_all+=task_loss_pix*loss_pix_weight
+                with torch.no_grad():
+                    grad_pix = torch.autograd.grad(outputs=task_loss_pix, inputs=E.parameters(),
+                                             create_graph=False, retain_graph=True, allow_unused=True)[0]
+                    gradnorm_pix= torch.norm(grad_pix, dim=None)
+                if gradnorm_pix > 0:
+                    loss_all += torch.div(input=task_loss_pix, other=gradnorm_pix.detach())
 
             if loss_adv_weight>0:
                 x_adv = Discri(xrec_s)
                 loss_adv = GAN_loss(x_adv, real=True)
-                loss_all+=loss_adv_weight*loss_adv
+                # loss_all+=loss_adv_weight*loss_adv
+                with torch.no_grad():
+                    grad_adv = \
+                    torch.autograd.grad(outputs=loss_adv, inputs=E.parameters(), create_graph=False, retain_graph=True,
+                                        allow_unused=True)[0]
+                    gradnorm_adv = torch.norm(grad_adv, dim=None)
+                if gradnorm_adv > 0:
+                    loss_all += torch.div(input=loss_adv, other=gradnorm_adv.detach())
 
             dst =  torch.mean(l_s) - torch.mean(phistar_gf(l_t))
-            loss_all+=loss_dst_weight*dst
+            # loss_all+=loss_dst_weight*dst
+            with torch.no_grad():
+                grad_dst = \
+                    torch.autograd.grad(outputs=dst, inputs=E.parameters(), create_graph=False, retain_graph=True,
+                                        allow_unused=True)[0]
+                gradnorm_dst = torch.norm(grad_dst, dim=None)
+            if gradnorm_dst > 0:
+                loss_all += torch.div(input=torch.abs(dst), other=gradnorm_dst.detach())
 
             # w=torch.cat((w_s,w_t),dim=0)
-            L_reg=torch.mean((w_s-latent_avg)** 2)
-            loss_all+=loss_w_weight*L_reg
+            # L_reg=torch.mean((w_s-latent_avg)** 2)
+            # loss_all+=loss_w_weight*L_reg
             optimizer_E.zero_grad()
             loss_all.backward()
             optimizer_E.step()
@@ -293,7 +323,13 @@ def training_loop_d(
                 writer.add_scalar('minE/src', l_s.mean().item(), global_step=E_iterations)
                 writer.add_scalar('minE/trg', l_t.mean().item(), global_step=E_iterations)
                 writer.add_scalar('minE/feat',loss_feat.item(),global_step=E_iterations)
-                writer.add_scalar('minE/reg',L_reg.item(),global_step=E_iterations)
+                writer.add_scalar('gradnorm/feat',gradnorm_f.item(),global_step=E_iterations)
+                writer.add_scalar('gradnorm/adv', gradnorm_adv.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/pixel', gradnorm_pix.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/ID',gradnorm_id.item(), global_step=E_iterations)
+                writer.add_scalar('gradnorm/dst', gradnorm_dst.item(), global_step=E_iterations)
+
+                # writer.add_scalar('minE/reg',L_reg.item(),global_step=E_iterations)
 
             if  config.local_rank==0:
                 log_message= f"[Task Loss:(pixel){task_loss_pix.cpu().detach().numpy():.3f},lpips {loss_feat.cpu().detach().numpy():.3f}" \

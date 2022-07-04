@@ -17,7 +17,7 @@ import imgaug.augmenters as iaa
 def brush_stroke_mask(img, color=(255,255,255)):
     # input :image,   code from: GPEN
     min_num_vertex = 8
-    max_num_vertex = 10
+    max_num_vertex = 8
     mean_angle = 2*math.pi / 5
     angle_range = 2*math.pi / 15
     min_width = 12
@@ -27,7 +27,7 @@ def brush_stroke_mask(img, color=(255,255,255)):
         mask = Image.new('RGB', (W, H), 0)
         if img is not None: mask = img #Image.fromarray(img)
         # for _ in range(np.random.randint(1, 2)):
-        num_vertex = np.random.randint(min_num_vertex, max_num_vertex)
+        num_vertex = 5#np.random.randint(min_num_vertex, max_num_vertex)
         angle_min = mean_angle - np.random.uniform(0, angle_range)#[2*pi/5-2*pi/15]  4/15
         angle_max = mean_angle + np.random.uniform(0, angle_range)#[2*pi/5+2*pi/15] 8/15
         angles = []
@@ -164,10 +164,20 @@ class ImageDataset(data.Dataset):
                 sparsity=(0.8, 1.0),
                 density_multiplier=(0.5, 1.0),
             )
-        meshtemp=np.load('mesh_weight.npy')#[num,256,256]->[256,256,num]
-        self.mesh=meshtemp.transpose(1,2,0)
-        # print(self.mesh.shape)
-        # print(self.mesh.shape)
+        self.rain=iaa.RainLayer(
+            density=(0.03, 0.14),
+            density_uniformity=(0.8, 1.0),
+            drop_size=(0.01, 0.02),
+            drop_size_uniformity=(0.2, 0.5),
+            angle=(-15, 15),
+            speed=(0.05, 0.20),
+            blur_sigma_fraction=(0.001, 0.001),
+        )
+        self.gn=iaa.GaussianBlur(sigma=(0.0, 1))
+        self.sp= iaa.SaltAndPepper(0.03, per_channel=True)
+        # meshtemp=np.load('mesh_weight.npy')#[num,256,256]->[256,256,num]
+        # self.mesh=meshtemp.transpose(1,2,0)
+
         # self.cloud=iaa.RainLayer(
         #     density=(0.03, 0.14),
         #     density_uniformity=(0.8, 1.0),
@@ -190,19 +200,27 @@ class ImageDataset(data.Dataset):
         img_t = Image.open(self.target_list[index % len(self.target_list)])
 
         # TODO: add more type perturb  real world ESRGAN
-        temp_num=index%2
+        temp_num=index%5
         if temp_num==0:
             img_t=brush_stroke_mask(img_t)
         elif temp_num==1:
             img_t_aug = self.cloud(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
-        # elif temp_num==2:
-        #     img_t_aug=self.mesh[:,:,np.random.randint(low=8,size=1)]*np.array(img_t)
-        #     img_t = Image.fromarray(np.uint8(img_t_aug))
+        elif temp_num==2:
+            img_t_aug = self.rain(image=np.array(img_t))
+            img_t = Image.fromarray(np.uint8(img_t_aug))
+        elif temp_num==3:
+            img_t_aug = self.gn(image=np.array(img_t))
+            img_t = Image.fromarray(np.uint8(img_t_aug))
+        elif  temp_num==4:
+            img_t_aug = self.sp(image=np.array(img_t))
+            img_t = Image.fromarray(np.uint8(img_t_aug))
+            # img_t_aug=self.mesh[:,:,np.random.randint(low=8,size=1)]*np.array(img_t)
+            # img_t = Image.fromarray(np.uint8(img_t_aug))
         # else:
-        #     img_t=np.array(img_t)
-        #     img_t_aug=alpha_rain(img_t)
-        #     img_t=Image.fromarray(np.uint8(img_t_aug))
+            # img_t=np.array(img_t)
+            # img_t_aug=self.rain(img_t)
+            # img_t=Image.fromarray(np.uint8(img_t_aug))
         item_t=self.transform_t(img_t)
         item_s=item_s*(self.max_val - self.min_val) + self.min_val
         item_t=item_t*(self.max_val - self.min_val) + self.min_val
@@ -216,7 +234,7 @@ class ImageDataset(data.Dataset):
 
 if __name__=='__main__':
     class Config:
-        data_root ='/home/xsy/datasets/cat_jpg'
+        data_root ='/home/xsy/ffhq_256'
         size =256
         min_val = -1.0
         max_val = 1.0
@@ -236,5 +254,5 @@ if __name__=='__main__':
         # writer.add_image("train",x_train,global_step=E_iterations)
     # tvutils.save_image(tensor=torch.cat([data['x_t'],data['x_s']], dim=0), fp='test.jpg', nrow=batch_size, normalize=True,
     #                    scale_each=True)
-    tvutils.save_image(tensor=data['x_t'], fp='test.jpg', nrow=4, normalize=True,
+    tvutils.save_image(tensor=data['x_t'], fp='test.png', nrow=4, normalize=True,
                        scale_each=True)

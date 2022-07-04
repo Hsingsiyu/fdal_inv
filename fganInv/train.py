@@ -29,16 +29,16 @@ def main():
                         help='training batch size for per gpu')
     parser.add_argument('--test_batch_size', type=int, default=16,
                         help='training batch size for per gpu')
-    parser.add_argument('--gpu_ids', type=list, default=[0,1],
+    parser.add_argument('--gpu_ids', type=list, default=[0,1,2],
                         help='list of gpus')
     parser.add_argument('--test_save_step', type=int, default=0,
                         help='how much step to be saved when inference')
     parser.add_argument('--save_root', type=str, default='./output/')
     parser.add_argument('--divergence', type=str, default='pearson',help='pearson,kl')
     parser.add_argument('--nepoch', type=int, default=3000)
-    parser.add_argument('--lrE', type=int, default=0.00001)
+    parser.add_argument('--lrE', type=int, default=0.0001)
     parser.add_argument('--lrD', type=int, default=0.00001)
-    parser.add_argument('--lrHhat', type=int, default=0.00001)
+    parser.add_argument('--lrHhat', type=int, default=0.0001)
     parser.add_argument('--adam', type=bool, default=True)
     parser.add_argument('--D_iters', type=int, default=1)
     parser.add_argument('--netE', type=str, default='')
@@ -60,7 +60,7 @@ def main():
         split=35000 #65000
     datasets_args = Config()
 
-    loss_args=EasyDict(loss_pix_weight=2,loss_w_weight=0.005,loss_dst_weight=5,loss_feat_weight=0.8,loss_id_weight=0.5) #0.5
+    loss_args=EasyDict(loss_pix_weight=2,loss_w_weight=0.005,loss_dst_weight=1,loss_feat_weight=0.8,loss_id_weight=0.5) #0.5
     opt_args = EasyDict(betas=(0.9, 0.99), eps=1e-8)
     E_lr_args = EasyDict(learning_rate=args.lrE, decay_step=6000, decay_rate=0.8, stair=False)
     D_lr_args = EasyDict(learning_rate=args.lrD, decay_step=6000, decay_rate=0.8, stair=False)
