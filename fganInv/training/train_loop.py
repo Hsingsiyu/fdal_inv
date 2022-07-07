@@ -1,5 +1,5 @@
 from dataset import ImageDataset
-from models.stylegan import Generator,Discriminator,h_layers
+from models.stylegan import Generator,Discriminator
 from models.e2style_encoder import BackboneEncoderFirstStage
 
 from lpips_pytorch import LPIPS #, lpips

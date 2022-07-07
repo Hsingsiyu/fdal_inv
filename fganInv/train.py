@@ -6,8 +6,8 @@ from datetime import datetime
 #os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
 
 from training.misc import EasyDict
-from training.train_loop import training_loop
-from training.train_loop_a import training_loop_a
+# from training.train_loop import training_loop
+# from training.train_loop_a import training_loop_a
 from training.train_loop_b import training_loop_b
 from training.train_loop_c import training_loop_c
 from training.train_loop_d import training_loop_d
@@ -48,6 +48,7 @@ def main():
     parser.add_argument('--configb', action='store_true',default=False,help='')
     parser.add_argument('--configc', action='store_true',default=False,help='')
     parser.add_argument('--configd', action='store_true',default=False,help='')
+    parser.add_argument('--geo',type=bool, default=True)
 
     args = parser.parse_args()
 
@@ -91,9 +92,7 @@ def main():
     logger = setup_logger(args.save_logs, 'inversion.log', 'inversion_logger')
     logger.info(f'Loading model.')
     # print()
-    if args.configa==True:
-        training_loop_a(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
-    elif args.configb==True:
+    if args.configb==True:
         training_loop_b(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
     elif args.configc == True:
         print('config c')
@@ -102,9 +101,9 @@ def main():
     elif args.configd == True:
         print('config d')
         training_loop_d(args, datasets_args, E_lr_args, D_lr_args, H_lr_args, opt_args, loss_args, logger, writer,
-                        image_snapshot_ticks=300, max_epoch=args.nepoch)
-    else:
-        training_loop(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
+                        image_snapshot_ticks=500, max_epoch=args.nepoch)
+    # else:
+    #     training_loop(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 import torchvision.utils
-from dataset import ImageDataset
+from dataset import ImageDataset,geometryDataset
 from models.stylegan import Generator,Discriminator
 from models.e2style_encoder import BackboneEncoderFirstStage
 from models.id_loss import IDLoss
@@ -107,9 +107,14 @@ def training_loop_d(
     if config.gpu_ids is not None:
         torch.distributed.init_process_group(backend='nccl',)  # choose nccl as backend using gpus
         torch.cuda.set_device(config.local_rank)
+    if config.geo==False:
+        train_dataset=ImageDataset(dataset_args,train=True)
+        val_dataset=ImageDataset(dataset_args,train=False)
+    else:
+        train_dataset=geometryDataset(dataset_args,train=True)
+        val_dataset=geometryDataset(dataset_args,train=False)
+        if config.local_rank == 0: print(f'geometry transform')
 
-    train_dataset=ImageDataset(dataset_args,train=True,paired=False)
-    val_dataset = ImageDataset(dataset_args, train=False,paired=True)
     if config.gpu_ids is not None:
         train_sampler=torch.utils.data.distributed.DistributedSampler(train_dataset)
         train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=config.train_batch_size,sampler=train_sampler,pin_memory=True,drop_last=True)

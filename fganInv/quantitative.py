@@ -10,46 +10,59 @@ import lpips
 import piq
 # from piq import ssim,psnr
 # PSNR
-from piqa import PSNR
+# from piqa import PSNR
 # SSIM
-from piqa import SSIM
+# from piqa import SSIM
 
 import torch
 import numpy as np
 import cv2
+from torchvision import transforms as trans
+
+
+class CustomDataset(torch.utils.data.Dataset):
+    # 初始化函数，得到数据
+    def __init__(self, path,trans=None):
+        self.img_list = sorted(glob.glob(path + '/*.*'))
+        # self.transform = trans.Compose([trans.ToTensor()])
+    # index是根据batchsize划分数据后得到的索引，最后将data和对应的labels进行一起返回
+    def __getitem__(self, index):
+        img=Image.open(self.img_list[index])
+
+        return np.array(img)
+
+    # 该函数返回数据大小长度，目的是DataLoader方便划分，如果不知道大小，DataLoader会一脸懵逼
+    def __len__(self):
+        return len(self.img_list)
 
 
 
 if __name__=='__main__':
     torch.manual_seed(123)
     #fix seed
-    path1='/home/xsy/idinvert_pytorch-mycode/results/0427_quan_val/src'# referece
-    path2='' # reconstructed
+    path1='/home/xsy/datasets/evaluationt_img/src'# referece
+    # path2='/home/xsy/invganV2/fganInv/results/inversion_ours/celebA1500_styleganinv_ffhq256_inpainting_styleganinv_encoder_epoch_050/inverted_img' # reconstructed
+    path2='/home/xsy/SOTAgan_inversion/e2style/result/inference_results'
+    batch_size=1000
+    # data_transforms=transforms.Compose([
+    #     transforms.ToTensor(),
+    # # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    # ])
+    img1=CustomDataset(path1)
+    imgLoader_1=torch.utils.data.DataLoader(img1,batch_size=batch_size)
 
+    img2=CustomDataset(path2)
+    imgLoader_2=torch.utils.data.DataLoader(img2,batch_size=batch_size)
 
+    x=next(iter(imgLoader_1))#[BN,3,W,H]
+    y=next(iter(imgLoader_2))#[BN,3,W,H]
 
-    batch_size=900
-    data_transforms=transforms.Compose([
-        transforms.ToTensor(),
-    # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    ])
-    img1=datasets.ImageFolder(path1,transform=None)
-    imgLoader_1=torch.utils.data.DataLoader(img1,batch_size=None)
-
-    img2=datasets.ImageFolder(path2,transform=None)
-    imgLoader_2=torch.utils.data.Dataloader(img2,batch_size=batch_size)
-
-
-    x,labels=next(iter(imgLoader_1))#[BN,3,W,H]
-    y,labels=next(iter(imgLoader_2))#[BN,3,W,H]
-
-    x=x.cuda()
-    y=y.cuda()
-
-
+    x=torch.tensor(x).float().cuda()
+    y=torch.tensor(y).float().cuda()
+    x=x.permute(0,3,1,2)
+    y=y.permute(0,3,1,2)
     #[0,1]
     ms_ssim_index: torch.Tensor = piq.multi_scale_ssim(x, y, data_range=255.)
-    # ms_ssim_loss = piq.MultiScaleSSIMLoss(data_range=1., reduction='none')(x, y)
     print(f"MS-SSIM index: {ms_ssim_index.item():0.4f}")
 
     psnr_index = piq.psnr(x, y, data_range=255., reduction='mean')
@@ -58,38 +71,24 @@ if __name__=='__main__':
     ssim_index = piq.ssim(x, y, data_range=255.)
     print(f"SSIM index: {ssim_index.item():0.4f}")
 
-    fid_metric=piq.FID()
-    x_feats = fid_metric.compute_feats(x)
-    y_feats = fid_metric.compute_feats(y)
-    fid: torch.Tensor = piq.FID()(x_feats, x_feats)
-    print(f"FID: {fid:0.4f}")
-
-    kid: torch.Tensor = piq.KID()(x, y)
-    print(f"KID: {kid:0.4f}")
-
-    swd_out=swd(x,y,device="cuda")#[0,1]
-
-
     MSE_out=torch.mean((x-y)**2) #[0,255]
+    # MSE_out=torch.mean((x-y).norm(2).pow(2))
+    print(f"MSE index: {MSE_out.item():0.4f}")
+
+    #todo Fid,kid
 
 
-    # # # FID,SWD
-    # # # MSE,LPIPS,
-    # # # SSIM,PSNR
+
+
+    x,y=x/255.0,y/255.0
+    with torch.no_grad():
+        swd_out=swd(x,y,device="cuda")#[0,1]
+    print(f"SWD: {swd_out:0.4f}")
 
     #[0,1]
     with torch.no_grad():
         loss_fn_alex=lpips.LPIPS(net='alex').cuda()
         d = loss_fn_alex.forward(x, y,normalize=True)
 
-
-#
-#     d_alex = loss_fn_alex((origin_img), (baseline_img))
-#     d_vgg=loss_fn_vgg((origin_img), (baseline_img))
-# print(f"LPIPS baseline: {d_alex.mean().item():.3f} {d_vgg.mean().item():.3f}")
-#
-# with torch.no_grad():
-#     d_alex = loss_fn_alex((origin_img), (our_img))
-#     d_vgg=loss_fn_vgg((origin_img), (our_img))
-# print(f"LPIPS our: {d_alex.mean().item():.3f} {d_vgg.mean().item():.3f}")
+    print(f"LPIPS: {d.mean().item():0.4f}")
 

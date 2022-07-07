@@ -679,8 +679,8 @@ class Discriminator(nn.Module):
         out = self.convs(input)
 
         batch, channel, height, width = out.shape
-        group = min(batch, self.stddev_group)
-        # group=batch
+        # group = min(batch, self.stddev_group)
+        group=batch
         stddev = out.view(
             group, -1, self.stddev_feat, channel // self.stddev_feat, height, width
         )
@@ -704,12 +704,14 @@ if __name__=='__main__':
     checkpoint_path='/home/xsy/invganV2/fganInv/models/pretrain/stylegan2-car-512.pt'
     checkpoint = torch.load(checkpoint_path , map_location=torch.device('cpu'))
 
-    # Discri = Discriminator(size=512)
+    Discri = Discriminator(size=512)
     # input = torch.randn(8, 3,512,384)
     # print(Discri(input).shape)
     G=Generator(size=512,style_dim=512,n_mlp=8)
     G.load_state_dict(checkpoint["g_ema"], strict=False)
-    w_s=torch.randn(1,512)
+    Discri.load_state_dict(checkpoint["d"], strict=True)
+
+    w_s=torch.zeros((1,512))
     x1, _ = G([w_s], input_is_latent=False, randomize_noise=True, return_latents=False)
     x2, _ = G([w_s], input_is_latent=False, randomize_noise=True, return_latents=False)
     x3, _ = G([w_s], input_is_latent=False, randomize_noise=False, return_latents=False)

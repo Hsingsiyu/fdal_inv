@@ -17,7 +17,7 @@ import imgaug.augmenters as iaa
 def brush_stroke_mask(img, color=(255,255,255)):
     # input :image,   code from: GPEN
     min_num_vertex = 5
-    max_num_vertex = 8
+    max_num_vertex = 8 #[8,10]
     mean_angle = 2*math.pi / 5
     angle_range = 2*math.pi / 15
     min_width = 12
@@ -65,17 +65,14 @@ def brush_stroke_mask(img, color=(255,255,255)):
     return mask
 
 class ImageDataset(data.Dataset):
-    def __init__(self, dataset_args,train=True,paired=True):
+    def __init__(self, dataset_args,train=True):
         self.root=dataset_args.data_root
         self.train=train   # train or val
-        self.paired=paired
         self.transform = trans.Compose([trans.ToTensor()])
         self.transform_t=self.transform
         if self.train:
             self.source_list=sorted(glob.glob(self.root+'/train/src/*.*'))
             self.target_list=sorted(glob.glob(self.root+'/train/trg/*.*'))
-            # self.source_list = self.collect_image(source=True)
-            # self.target_list = self.collect_image(source=False)
         else:
             self.source_list=sorted(glob.glob(self.root+'/test/*.*'))
             self.target_list=sorted(glob.glob(self.root+'/test/*.*'))
@@ -106,22 +103,14 @@ class ImageDataset(data.Dataset):
         self.gn=iaa.GaussianBlur(sigma=(0.0, 2))
         self.sp= iaa.SaltAndPepper(0.03, per_channel=True)
 
-    # def collect_image(self,source=True):
-    #     if self.train:
-    #         if source:
-    #             image_path_list=self.files_s[:int(self.split)]
-    #         else: #train target
-    #             image_path_list=self.files_t[:int(self.split)]
-    #     return image_path_list
-
     def __getitem__(self, index):
         item_s = self.transform(Image.open(self.source_list[index % len(self.source_list)]))
         img_t = Image.open(self.target_list[index % len(self.target_list)])
         temp_num=index%5
         if temp_num==0:
-            # img_t=brush_stroke_mask(img_t)
-            img_t_aug = self.snow(image=np.array(img_t))
-            img_t = Image.fromarray(np.uint8(img_t_aug))
+            img_t=brush_stroke_mask(img_t)
+            # img_t_aug = self.snow(image=np.array(img_t))
+            # img_t = Image.fromarray(np.uint8(img_t_aug))
         elif temp_num==1:
             img_t_aug = self.cloud(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
@@ -143,19 +132,54 @@ class ImageDataset(data.Dataset):
     def __len__(self):
         return max(len(self.source_list), len(self.target_list))
 
+class geometryDataset(data.Dataset):
+    def __init__(self, dataset_args,train=True):
+        self.root=dataset_args.data_root
+        self.train=train   # train or val
+        self.transform = trans.Compose([trans.ToTensor()])
+        if self.train:
+            self.source_list=sorted(glob.glob(self.root+'/train/src/*.*'))
+            self.target_list=sorted(glob.glob(self.root+'/train/trg/*.*'))
+        else:
+            self.source_list=sorted(glob.glob(self.root+'/test/*.*'))
+            self.target_list=sorted(glob.glob(self.root+'/test/*.*'))
+        self.max_val = dataset_args.max_val
+        self.min_val = dataset_args.min_val
+        self.size = dataset_args.size
 
+        self.affine_transform=trans.Compose([trans.RandomAffine(degrees=(-30, 30),resample=3)])
+        self.zoom_transform=trans.Compose([trans.CenterCrop([225,225]),trans.Resize([256,256])])
+        self.pad_transform=trans.Compose([trans.Pad(padding=[30],fill=0),trans.Resize([256,256])])
+
+    def __getitem__(self, index):
+        item_s = self.transform(Image.open(self.source_list[index % len(self.source_list)]))
+        img_t = Image.open(self.target_list[index % len(self.target_list)])
+        choice=index%3
+        if choice==1:
+            img_t=self.affine_transform(img_t)
+        elif choice==2:
+            img_t=self.pad_transform(img_t)
+        else:
+            img_t=self.zoom_transform(img_t)
+        item_t=self.transform(img_t)
+        item_s=item_s*(self.max_val - self.min_val) + self.min_val
+        item_t=item_t*(self.max_val - self.min_val) + self.min_val
+        return {'x_s': item_s, 'x_t': item_t}
+
+    def __len__(self):
+        return max(len(self.source_list), len(self.target_list))
 
 if __name__=='__main__':
     class Config:
-        data_root ='/home/xsy/datasets/car/car'
-        size =512
+        data_root ='/home/xsy/ffhq_256'
+        size =256
         min_val = -1.0
         max_val = 1.0
         # target_type='stroke'
         # split=1000 #65000
     datasets_args = Config()
     batch_size=32
-    train_dataset = ImageDataset(datasets_args, train=False)
+    train_dataset = geometryDataset(datasets_args, train=False)
     from torch.utils.data import DataLoader
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     data_iter = iter(train_dataloader)
