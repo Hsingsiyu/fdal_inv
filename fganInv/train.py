@@ -48,7 +48,7 @@ def main():
     parser.add_argument('--configb', action='store_true',default=False,help='')
     parser.add_argument('--configc', action='store_true',default=False,help='')
     parser.add_argument('--configd', action='store_true',default=False,help='')
-    parser.add_argument('--geo',type=bool, default=True)
+    parser.add_argument('--geo',type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -101,7 +101,7 @@ def main():
     elif args.configd == True:
         print('config d')
         training_loop_d(args, datasets_args, E_lr_args, D_lr_args, H_lr_args, opt_args, loss_args, logger, writer,
-                        image_snapshot_ticks=500, max_epoch=args.nepoch)
+                        image_snapshot_ticks=600, max_epoch=args.nepoch)
     # else:
     #     training_loop(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
 

@@ -42,17 +42,17 @@ if __name__=='__main__':
     #fix seed
     path1='/home/xsy/datasets/evaluationt_img/src'# referece
     # path2='/home/xsy/invganV2/fganInv/results/inversion_ours/celebA1500_styleganinv_ffhq256_inpainting_styleganinv_encoder_epoch_050/inverted_img' # reconstructed
-    path2='/home/xsy/SOTAgan_inversion/e2style/result/inference_results'
+    path2='/home/xsy/SOTAgan_inversion/e2style/result-src/inference_results'
     batch_size=1000
     # data_transforms=transforms.Compose([
     #     transforms.ToTensor(),
     # # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     # ])
     img1=CustomDataset(path1)
-    imgLoader_1=torch.utils.data.DataLoader(img1,batch_size=batch_size)
+    imgLoader_1=torch.utils.data.DataLoader(img1,batch_size=batch_size,shuffle=False)
 
     img2=CustomDataset(path2)
-    imgLoader_2=torch.utils.data.DataLoader(img2,batch_size=batch_size)
+    imgLoader_2=torch.utils.data.DataLoader(img2,batch_size=batch_size,shuffle=False)
 
     x=next(iter(imgLoader_1))#[BN,3,W,H]
     y=next(iter(imgLoader_2))#[BN,3,W,H]
@@ -62,27 +62,24 @@ if __name__=='__main__':
     x=x.permute(0,3,1,2)
     y=y.permute(0,3,1,2)
     #[0,1]
-    ms_ssim_index: torch.Tensor = piq.multi_scale_ssim(x, y, data_range=255.)
-    print(f"MS-SSIM index: {ms_ssim_index.item():0.4f}")
+    with torch.no_grad():
+        ms_ssim_index: torch.Tensor = piq.multi_scale_ssim(x, y, data_range=255.)
+        print(f"MS-SSIM index: {ms_ssim_index.item():0.4f}")
 
-    psnr_index = piq.psnr(x, y, data_range=255., reduction='mean')
-    print(f"PSNR index: {psnr_index.item():0.4f}")
+        psnr_index = piq.psnr(x, y, data_range=255., reduction='mean')
+        print(f"PSNR index: {psnr_index.item():0.4f}")
 
-    ssim_index = piq.ssim(x, y, data_range=255.)
-    print(f"SSIM index: {ssim_index.item():0.4f}")
-
-    MSE_out=torch.mean((x-y)**2) #[0,255]
-    # MSE_out=torch.mean((x-y).norm(2).pow(2))
-    print(f"MSE index: {MSE_out.item():0.4f}")
-
-    #todo Fid,kid
-
+        ssim_index = piq.ssim(x, y, data_range=255.)
+        print(f"SSIM index: {ssim_index.item():0.4f}")
 
 
 
     x,y=x/255.0,y/255.0
     with torch.no_grad():
         swd_out=swd(x,y,device="cuda")#[0,1]
+        # MSE_out=torch.mean((x-y)**2) #[0,255]
+        # MSE_out=torch.mean((x-y).norm(2).pow(2))
+        # print(f"MSE index: {MSE_out.item():0.4f}")
     print(f"SWD: {swd_out:0.4f}")
 
     #[0,1]

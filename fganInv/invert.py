@@ -12,8 +12,8 @@ from utils.visualizer import save_image, load_image, resize_image
 def parse_args():
   """Parses arguments."""
   parser = argparse.ArgumentParser()
-  parser.add_argument('--model_name', default='styleganinv_ffhq256_inpainting',type=str, help='Name of the GAN model.')
-  parser.add_argument('image_list', type=str,default='/home/xsy/datasets/evaluationt_img/image_list.txt',
+  parser.add_argument('--model_name', default='styleganinv_ffhq256_gnsp',type=str, help='Name of the GAN model.')
+  parser.add_argument('--image_list', type=str,default='/home/xsy/datasets/evaluationt_img/celebAHQ1500.txt',
                       help='List of images to invert.')
   parser.add_argument('-o', '--output_dir', type=str, default='',
                       help='Directory to save the results. If not specified, '
@@ -41,6 +41,8 @@ def main():
 
   output_dir = args.output_dir or f'./results/inversion_{args.E_type}/{image_list_name}_{args.model_name}_{net_name}'
   os.makedirs(output_dir)
+  os.makedirs(os.path.join(output_dir,'inverted_img'))
+
   print(f'Loading model.')
   inverter = StyleGANInverter(args.model_name,opt=args)
   image_size = args.viz_size
@@ -64,7 +66,7 @@ def main():
   visualizer = HtmlPageVisualizer(
       num_rows=len(image_list), num_cols=len(headers), viz_size=viz_size)
   visualizer.set_headers(headers)
-  #TODO  inference time
+  # TODO  inference time?
   # Invert images.
   print(f'Start inversion.')
   latent_codes = []
@@ -75,7 +77,7 @@ def main():
     code, viz_results=inverter.easy_inti_code(image)
     latent_codes.append(code)
     save_image(f'{output_dir}/{image_name}_ori.png', image)
-    save_image(f'{output_dir}/{image_name}_enc.png', viz_results[0])
+    save_image(f'{output_dir}/inverted_img/{image_name}_enc.png', viz_results[0])
 
     visualizer.set_cell(img_idx, 0, text=image_name)
     visualizer.set_cell(img_idx, 1, image=image)

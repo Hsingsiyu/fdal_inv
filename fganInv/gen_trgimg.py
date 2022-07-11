@@ -10,6 +10,7 @@ import torch
 import cv2
 import glob
 from PIL import Image, ImageDraw
+import imgaug.augmenters as iaa
 
 def _get_tensor_value(tensor):
   return tensor.cpu().detach().numpy()
@@ -49,7 +50,7 @@ def parse_args():
   """Parses arguments."""
   parser = argparse.ArgumentParser()
   parser.add_argument('--model_name', type=str,default='styleganinv_ffhq256', help='Name of the GAN model.') #todo
-  parser.add_argument('--data_root', type=str,default='/home/xsy/datasets/celeba_hq_256',
+  parser.add_argument('--data_root', type=str,default='/home/xsy/datasets/evaluationt_img/src',
                       help='List of images to invert.')
   # parser.add_argument('--image_list', type=str,default='/home/xsy/FFHQ_256_png',
   #                     help='List of images to invert.')
@@ -79,34 +80,60 @@ def parse_args():
   # parser.add_argument('--batch_size', type=int, default=1,
   #                     help='the batch size in one picture ')
   return parser.parse_args()
-#TODO  多少张图片呐？  dataset 的旋转改一下！
 
 def main():
   """Main function."""
   args = parse_args()
-  # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
-  assert os.path.exists(args.data_root)
+  # assert os.path.exists(args.data_root)
   img_list = sorted(glob.glob(args.data_root + '/*.*'))
   image_list_name = os.path.splitext(os.path.basename(args.data_root))[0]
   output_dir = args.output_dir or f'results/inversion/{image_list_name}'
-  os.mkdir(output_dir)
-  os.mkdir(os.path.join(output_dir,'src'))
-  os.mkdir(os.path.join(output_dir,'trg'))
+  os.mkdir(os.path.join(output_dir,'trg-gnsp'))#todo
+  # os.mkdir(os.path.join(output_dir,'src'))
+  # os.mkdir(os.path.join(output_dir,'trg'))
 
-  file_handle=open(output_dir+'/image_list.txt',mode='w')
+  file_handle=open(output_dir+'/image_list-gnsp.txt',mode='w') #todo
   file_cont=[]
+  # cloud = iaa.CloudLayer(
+  #     intensity_mean=(196, 255),
+  #     intensity_freq_exponent=(-2.5, -2.0),
+  #     intensity_coarse_scale=10,
+  #     alpha_min=0,
+  #     alpha_multiplier=(0.25, 0.75),
+  #     alpha_size_px_max=(2, 8),
+  #     alpha_freq_exponent=(-2.5, -2.0),
+  #     sparsity=(0.8, 1.0),
+  #     density_multiplier=(0.5, 1.0),
+  # )
+  # rain = iaa.RainLayer(
+  #     density=(0.03, 0.14),
+  #     density_uniformity=(0.8, 1.0),
+  #     drop_size=(0.01, 0.02),
+  #     drop_size_uniformity=(0.2, 0.5),
+  #     angle=(-15, 15),
+  #     speed=(0.05, 0.20),
+  #     blur_sigma_fraction=(0.001, 0.001),
+  # )
+  gn = iaa.GaussianBlur(sigma=(0.0, 2))
+  sp=iaa.SaltAndPepper(0.03, per_channel=True)
   for i in range(1500):
-
       img_pth=img_list[i]
       image_name = os.path.splitext(os.path.basename(img_pth))[0]
       img_s = Image.open(img_pth)
-      img_t = brush_stroke_mask(img_s)
-      save_pth=os.path.join(output_dir,'trg',image_name+'.png')
+      # img_s.save(os.path.join(output_dir,'src',image_name+'.png'))
+      # img_t = brush_stroke_mask(img_s)#TODO
+      if i %2==1:
+          img_t_aug = gn(image=np.array(img_s))
+          img_t = Image.fromarray(np.uint8(img_t_aug))
+      else:
+          img_t_aug = sp(image=np.array(img_s))
+          img_t = Image.fromarray(np.uint8(img_t_aug))
+      save_pth=os.path.join(output_dir,'trg-gnsp',image_name+'.png') #todo
       img_t.save(save_pth)
       file_cont.append(save_pth+'\n')
-      img_s.save(os.path.join(output_dir,'src',image_name+'.png'))
   file_handle.writelines(file_cont)
   file_handle.close()
 
 if __name__ == '__main__':
   main()
+#todo:  dataroot outputroot os.mkdir  img_t save_pth

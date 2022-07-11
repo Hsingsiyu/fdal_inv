@@ -79,48 +79,48 @@ class ImageDataset(data.Dataset):
         self.max_val = dataset_args.max_val
         self.min_val = dataset_args.min_val
         self.size = dataset_args.size
-        self.cloud =iaa.CloudLayer(
-                intensity_mean=(196, 255),
-                intensity_freq_exponent=(-2.5, -2.0),
-                intensity_coarse_scale=10,
-                alpha_min=0,
-                alpha_multiplier=(0.25, 0.75),
-                alpha_size_px_max=(2, 8),
-                alpha_freq_exponent=(-2.5, -2.0),
-                sparsity=(0.8, 1.0),
-                density_multiplier=(0.5, 1.0),
-            )
-        self.rain=iaa.RainLayer(
-            density=(0.03, 0.14),
-            density_uniformity=(0.8, 1.0),
-            drop_size=(0.01, 0.02),
-            drop_size_uniformity=(0.2, 0.5),
-            angle=(-15, 15),
-            speed=(0.05, 0.20),
-            blur_sigma_fraction=(0.001, 0.001),
-        )
-        self.snow = iaa.Snowflakes(flake_size=(0.2, 0.5), speed=(0.007, 0.02)) #only for cars
+        # self.cloud =iaa.CloudLayer(
+        #         intensity_mean=(196, 255),
+        #         intensity_freq_exponent=(-2.5, -2.0),
+        #         intensity_coarse_scale=10,
+        #         alpha_min=0,
+        #         alpha_multiplier=(0.25, 0.75),
+        #         alpha_size_px_max=(2, 8),
+        #         alpha_freq_exponent=(-2.5, -2.0),
+        #         sparsity=(0.8, 1.0),
+        #         density_multiplier=(0.5, 1.0),
+        #     )
+        # self.rain=iaa.RainLayer(
+        #     density=(0.03, 0.14),
+        #     density_uniformity=(0.8, 1.0),
+        #     drop_size=(0.01, 0.02),
+        #     drop_size_uniformity=(0.2, 0.5),
+        #     angle=(-15, 15),
+        #     speed=(0.05, 0.20),
+        #     blur_sigma_fraction=(0.001, 0.001),
+        # )
+        # self.snow = iaa.Snowflakes(flake_size=(0.2, 0.5), speed=(0.007, 0.02)) #only for cars
         self.gn=iaa.GaussianBlur(sigma=(0.0, 2))
-        self.sp= iaa.SaltAndPepper(0.03, per_channel=True)
+        self.sp= iaa.SaltAndPepper(0.05)
 
     def __getitem__(self, index):
         item_s = self.transform(Image.open(self.source_list[index % len(self.source_list)]))
         img_t = Image.open(self.target_list[index % len(self.target_list)])
-        temp_num=index%5
+        temp_num=index%2
         if temp_num==0:
-            img_t=brush_stroke_mask(img_t)
-            # img_t_aug = self.snow(image=np.array(img_t))
-            # img_t = Image.fromarray(np.uint8(img_t_aug))
-        elif temp_num==1:
-            img_t_aug = self.cloud(image=np.array(img_t))
-            img_t = Image.fromarray(np.uint8(img_t_aug))
-        elif temp_num==2:
-            img_t_aug = self.rain(image=np.array(img_t))
-            img_t = Image.fromarray(np.uint8(img_t_aug))
-        elif temp_num==3:
+        #     img_t=brush_stroke_mask(img_t)
+        #     # img_t_aug = self.snow(image=np.array(img_t))
+        #     # img_t = Image.fromarray(np.uint8(img_t_aug))
+        # elif temp_num==1:
+        #     img_t_aug = self.cloud(image=np.array(img_t))
+        #     img_t = Image.fromarray(np.uint8(img_t_aug))
+        # elif temp_num==2:
+        #     img_t_aug = self.rain(image=np.array(img_t))
+        #     img_t = Image.fromarray(np.uint8(img_t_aug))
+        # elif temp_num==3:
             img_t_aug = self.gn(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
-        elif  temp_num==4:
+        elif  temp_num==1:
             img_t_aug = self.sp(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
 
@@ -179,7 +179,7 @@ if __name__=='__main__':
         # split=1000 #65000
     datasets_args = Config()
     batch_size=32
-    train_dataset = geometryDataset(datasets_args, train=False)
+    train_dataset = ImageDataset(datasets_args, train=False)
     from torch.utils.data import DataLoader
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     data_iter = iter(train_dataloader)
