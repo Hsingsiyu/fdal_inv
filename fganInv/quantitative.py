@@ -24,11 +24,13 @@ class CustomDataset(torch.utils.data.Dataset):
     # 初始化函数，得到数据
     def __init__(self, path,trans=None):
         self.img_list = sorted(glob.glob(path + '/*.*'))
+        self.trans=trans
         # self.transform = trans.Compose([trans.ToTensor()])
     # index是根据batchsize划分数据后得到的索引，最后将data和对应的labels进行一起返回
     def __getitem__(self, index):
         img=Image.open(self.img_list[index])
-
+        if  self.trans is not None:
+            img=self.trans(img)
         return np.array(img)
 
     # 该函数返回数据大小长度，目的是DataLoader方便划分，如果不知道大小，DataLoader会一脸懵逼
@@ -42,16 +44,17 @@ if __name__=='__main__':
     #fix seed
     path1='/home/xsy/datasets/evaluationt_img/src'# referece
     # path2='/home/xsy/invganV2/fganInv/results/inversion_ours/celebA1500_styleganinv_ffhq256_inpainting_styleganinv_encoder_epoch_050/inverted_img' # reconstructed
-    path2='/home/xsy/SOTAgan_inversion/e2style/result-src/inference_results'
+    path2='/home/xsy/SOTAgan_inversion/hyperstyle/result-src/inference_results/4'
     batch_size=1000
     # data_transforms=transforms.Compose([
-    #     transforms.ToTensor(),
+    #     # transforms.ToTensor(),
+    #     transforms.Resize(256),
     # # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     # ])
     img1=CustomDataset(path1)
     imgLoader_1=torch.utils.data.DataLoader(img1,batch_size=batch_size,shuffle=False)
 
-    img2=CustomDataset(path2)
+    img2=CustomDataset(path2,trans=None)
     imgLoader_2=torch.utils.data.DataLoader(img2,batch_size=batch_size,shuffle=False)
 
     x=next(iter(imgLoader_1))#[BN,3,W,H]
@@ -72,20 +75,21 @@ if __name__=='__main__':
         ssim_index = piq.ssim(x, y, data_range=255.)
         print(f"SSIM index: {ssim_index.item():0.4f}")
 
-
-
     x,y=x/255.0,y/255.0
+    # item_s = item_s * (self.max_val - self.min_val) + self.min_val
+    x=x*2-1
+    y=y*2-1
     with torch.no_grad():
         swd_out=swd(x,y,device="cuda")#[0,1]
-        # MSE_out=torch.mean((x-y)**2) #[0,255]
+        MSE_out=torch.mean((x-y)**2) #[-1,1]
         # MSE_out=torch.mean((x-y).norm(2).pow(2))
-        # print(f"MSE index: {MSE_out.item():0.4f}")
+        print(f"MSE index: {MSE_out.item():0.4f}")
     print(f"SWD: {swd_out:0.4f}")
-
     #[0,1]
     with torch.no_grad():
         loss_fn_alex=lpips.LPIPS(net='alex').cuda()
-        d = loss_fn_alex.forward(x, y,normalize=True)
+        # d = loss_fn_alex.forward(x, y,normalize=True)
+        d = loss_fn_alex.forward(x, y,normalize=False)
 
     print(f"LPIPS: {d.mean().item():0.4f}")
 

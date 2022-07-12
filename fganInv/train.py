@@ -41,8 +41,8 @@ def main():
     parser.add_argument('--lrHhat', type=int, default=0.0001)
     parser.add_argument('--adam', type=bool, default=True)
     parser.add_argument('--D_iters', type=int, default=1)
-    parser.add_argument('--netE', type=str, default='')
-    parser.add_argument('--nets', type=str, default='')
+    parser.add_argument('--netE', type=str, default='/home/xsy/invganV2/fganInv/output/fDAL-stylegan2-ffhq-256Jul01_22-41_stylegan2-ffhq-256_bs_6_epoch3000_regcoef2_0.005_1_adamTrue_DIV_pearson/save_models/styleganinv_encoder_epoch_050.pth')
+    parser.add_argument('--nets', type=str, default='/home/xsy/invganV2/fganInv/output/fDAL-stylegan2-ffhq-256Jul01_22-41_stylegan2-ffhq-256_bs_6_epoch3000_regcoef2_0.005_1_adamTrue_DIV_pearson/save_models/checkpoint_50_epoch.pkl')
     parser.add_argument('--local_rank', type=int, default=0,help='node rank for distributed training')
     parser.add_argument('--configa', action='store_true',default=False,help='')
     parser.add_argument('--configb', action='store_true',default=False,help='')
@@ -101,7 +101,7 @@ def main():
     elif args.configd == True:
         print('config d')
         training_loop_d(args, datasets_args, E_lr_args, D_lr_args, H_lr_args, opt_args, loss_args, logger, writer,
-                        image_snapshot_ticks=600, max_epoch=args.nepoch)
+                        image_snapshot_ticks=1000, max_epoch=args.nepoch)
     # else:
     #     training_loop(args, datasets_args, E_lr_args, D_lr_args, H_lr_args,opt_args,loss_args, logger, writer,image_snapshot_ticks=500,max_epoch=args.nepoch)
 

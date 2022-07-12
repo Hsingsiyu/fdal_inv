@@ -27,22 +27,6 @@ def _get_tensor_value(tensor):
   return tensor.cpu().detach().numpy()
 
 class StyleGANInverter(object):
-  """Defines the class for StyleGAN inversion.
-
-  Even having the encoder, the output latent code is not good enough to recover
-  the target image satisfyingly. To this end, this class optimize the latent
-  code based on gradient descent algorithm. In the optimization process,
-  following loss functions will be considered:
-
-  (1) Pixel-wise reconstruction loss. (required)
-  (2) Perceptual loss. (optional, but recommended)
-  (3) Regularization loss from encoder. (optional, but recommended for in-domain
-      inversion)
-
-  NOTE: The encoder can be missing for inversion, in which case the latent code
-  will be randomly initialized and the regularization loss will be ignored.
-  """
-
   def __init__(self,model_name,opt,):
     self.model_name = model_name
     ckptG = torch.load(opt.netG, map_location=torch.device('cpu'))

@@ -174,8 +174,6 @@ def training_loop_d(
     l_feat = DDP(l_feat, device_ids=[config.local_rank], broadcast_buffers=False, find_unused_parameters=True)
     l_id = DDP(l_id, device_ids=[config.local_rank], broadcast_buffers=False, find_unused_parameters=True)
 
-
-
     phistar_gf = lambda t: ConjugateDualFunction(config.divergence).fstarT(t)
     D_iters = config.D_iters
 
