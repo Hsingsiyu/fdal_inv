@@ -44,7 +44,7 @@ if __name__=='__main__':
     #fix seed
     path1='/home/xsy/datasets/evaluationt_img/src'# referece
     # path2='/home/xsy/invganV2/fganInv/results/inversion_ours/celebA1500_styleganinv_ffhq256_inpainting_styleganinv_encoder_epoch_050/inverted_img' # reconstructed
-    path2='/home/xsy/SOTAgan_inversion/hyperstyle/result-src/inference_results/4'
+    path2='/home/xsy/invganV2/fganInv/results/inversion_ours/celebAHQ1500_styleganinv_ffhq256-src_styleganinv_encoder_epoch_055/inverted_img'
     batch_size=1000
     # data_transforms=transforms.Compose([
     #     # transforms.ToTensor(),

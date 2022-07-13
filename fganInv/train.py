@@ -27,7 +27,7 @@ def main():
                         help='the name of the training dataset (defaults; ffhq,car,cats)')
     parser.add_argument('--train_batch_size', type=int, default=6,
                         help='training batch size for per gpu')
-    parser.add_argument('--test_batch_size', type=int, default=16,
+    parser.add_argument('--test_batch_size', type=int, default=8,
                         help='training batch size for per gpu')
     parser.add_argument('--gpu_ids', type=list, default=[0,1,2],
                         help='list of gpus')
@@ -42,7 +42,7 @@ def main():
     parser.add_argument('--adam', type=bool, default=True)
     parser.add_argument('--D_iters', type=int, default=1)
     parser.add_argument('--netE', type=str, default='/home/xsy/invganV2/fganInv/output/fDAL-stylegan2-ffhq-256Jul01_22-41_stylegan2-ffhq-256_bs_6_epoch3000_regcoef2_0.005_1_adamTrue_DIV_pearson/save_models/styleganinv_encoder_epoch_050.pth')
-    parser.add_argument('--nets', type=str, default='/home/xsy/invganV2/fganInv/output/fDAL-stylegan2-ffhq-256Jul01_22-41_stylegan2-ffhq-256_bs_6_epoch3000_regcoef2_0.005_1_adamTrue_DIV_pearson/save_models/checkpoint_50_epoch.pkl')
+    parser.add_argument('--nets', type=str, default='')
     parser.add_argument('--local_rank', type=int, default=0,help='node rank for distributed training')
     parser.add_argument('--configa', action='store_true',default=False,help='')
     parser.add_argument('--configb', action='store_true',default=False,help='')

@@ -12,7 +12,7 @@ from utils.visualizer import save_image, load_image, resize_image
 def parse_args():
   """Parses arguments."""
   parser = argparse.ArgumentParser()
-  parser.add_argument('--model_name', default='styleganinv_ffhq256_gnsp',type=str, help='Name of the GAN model.')
+  parser.add_argument('--model_name', default='styleganinv_ffhq256-src',type=str, help='Name of the GAN model.')
   parser.add_argument('--image_list', type=str,default='/home/xsy/datasets/evaluationt_img/celebAHQ1500.txt',
                       help='List of images to invert.')
   parser.add_argument('-o', '--output_dir', type=str, default='',
@@ -25,7 +25,7 @@ def parse_args():
                       help='Which GPU(s) to use. (default: `0`)')
   parser.add_argument('--E_type', type=str, default='ours',
                       help='baseline or ours')
-  parser.add_argument('--netE', type=str, default='/home/xsy/invganV2/fganInv/output/fDAL-stylegan2-ffhq-256Jul01_22-41_stylegan2-ffhq-256_bs_6_epoch3000_regcoef2_0.005_1_adamTrue_DIV_pearson/save_models/styleganinv_encoder_epoch_050.pth',
+  parser.add_argument('--netE', type=str, default='/home/xsy/invganV2/fganInv/output/fDAL-stylegan2-ffhq-256Jul11_09-53_stylegan2-ffhq-256_bs_6_epoch3000_regcoef2_0.005_1_adamTrue_DIV_pearson/save_models/styleganinv_encoder_epoch_055.pth',
                       help='path of encoder')
   parser.add_argument('--netG', type=str, default='/home/xsy/invganV2/fganInv/models/pretrain/stylegan2-ffhq-256.pt',
                       help='path of encoder')

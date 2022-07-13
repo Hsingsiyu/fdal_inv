@@ -107,10 +107,7 @@ def main():
   else:
     boundary = boundary_file
     manipulate_layers = args.manipulate_layers
-  # if manipulate_layers:
-  #   logger.info(f'  Manipulating on layers `{manipulate_layers}`.')
-  # else:
-  #   logger.info(f'  Manipulating on ALL layers.')
+
 
   # Manipulate images.
   print(f'Start manipulation.')

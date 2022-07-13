@@ -77,7 +77,7 @@ def main():
     logger.info(f'Loading model.')
 
     training_loop_e(args, datasets_args, E_lr_args, D_lr_args, H_lr_args, opt_args, loss_args, logger, writer,
-                        image_snapshot_ticks=300, max_epoch=args.nepoch)
+                        image_snapshot_ticks=100, max_epoch=args.nepoch)
 
 
 if __name__ == '__main__':

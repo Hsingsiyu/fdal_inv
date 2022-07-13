@@ -14,6 +14,8 @@ from PIL import Image, ImageDraw
 import math
 import cv2
 import imgaug.augmenters as iaa
+import skimage
+
 def brush_stroke_mask(img, color=(255,255,255)):
     # input :image,   code from: GPEN
     min_num_vertex = 5
@@ -90,38 +92,35 @@ class ImageDataset(data.Dataset):
         #         sparsity=(0.8, 1.0),
         #         density_multiplier=(0.5, 1.0),
         #     )
-        self.rain=iaa.RainLayer(
-            density=(0.03, 0.14),
-            density_uniformity=(0.8, 1.0),
-            drop_size=(0.01, 0.02),
-            drop_size_uniformity=(0.2, 0.5),
-            angle=(-15, 15),
-            speed=(0.05, 0.20),
-            blur_sigma_fraction=(0.001, 0.001),
-        )
+        # self.rain=iaa.RainLayer(
+        #     density=(0.03, 0.14),
+        #     density_uniformity=(0.8, 1.0),
+        #     drop_size=(0.01, 0.02),
+        #     drop_size_uniformity=(0.2, 0.5),
+        #     angle=(-15, 15),
+        #     speed=(0.05, 0.20),
+        #     blur_sigma_fraction=(0.001, 0.001),
+        # )
         # self.snow = iaa.Snowflakes(flake_size=(0.2, 0.5), speed=(0.007, 0.02)) #only for cars
-        self.gn=iaa.GaussianBlur(sigma=(0.0, 2))
+        self.gn=iaa.GaussianBlur(sigma=2)
         self.sp= iaa.SaltAndPepper(0.05)
 
     def __getitem__(self, index):
         item_s = self.transform(Image.open(self.source_list[index % len(self.source_list)]))
         img_t = Image.open(self.target_list[index % len(self.target_list)])
-        temp_num=np.random.randint(4)
+        temp_num=np.random.randint(3)
         if temp_num==0:
             img_t=brush_stroke_mask(img_t)
-            # img_t_aug = self.snow(image=np.array(img_t))
+            # img_t_aug = self.gn(image=np.array(img_t))
+            # img_t_aug=skimage.util.random_noise(np.array(img_t), mode='gaussian', var=0.01)
             # img_t = Image.fromarray(np.uint8(img_t_aug))
-        # elif temp_num==1:
-        #     img_t_aug = self.cloud(image=np.array(img_t))
-        #     img_t = Image.fromarray(np.uint8(img_t_aug))
         elif temp_num==1:
-            img_t_aug = self.rain(image=np.array(img_t))
+            img_t_aug = self.sp(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
+            # img_t_aug=skimage.util.random_noise(np.array(img_t), mode='s&p')
+            # img_t = Image.fromarray(np.uint8(img_t_aug))
         elif temp_num==2:
             img_t_aug = self.gn(image=np.array(img_t))
-            img_t = Image.fromarray(np.uint8(img_t_aug))
-        elif  temp_num==3:
-            img_t_aug = self.sp(image=np.array(img_t))
             img_t = Image.fromarray(np.uint8(img_t_aug))
 
         item_t=self.transform_t(img_t)

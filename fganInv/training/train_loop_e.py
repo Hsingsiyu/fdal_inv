@@ -2,7 +2,8 @@ import torchvision.utils
 from dataset import ImageDataset
 from models.stylegan import Generator,Discriminator
 from models.e2style_encoder import BackboneEncoderFirstStage
-from models.id_loss import IDLoss
+# from models.id_loss import IDLoss
+from models.moco_loss import MocoLoss
 from models.lpips import alexnet,lhat_Loss,ScalingLayer
 import lpips
 from training.misc import EasyDict
@@ -15,7 +16,6 @@ from torch.utils.data import DataLoader
 import copy
 import json
 from utils.fDAL import ConjugateDualFunction
-from torch.nn.parallel import DistributedDataParallel as DDP
 import itertools
 import random
 import torch.nn.functional as F
@@ -100,14 +100,14 @@ def training_loop_e(
     loss_adv_weight=0.1
     loss_id_weight=loss_args.loss_id_weight
 
-    train_dataset=ImageDataset(dataset_args,train=True,paired=False)
-    val_dataset = ImageDataset(dataset_args, train=False,paired=True)
+    train_dataset=ImageDataset(dataset_args,train=True)
+    val_dataset = ImageDataset(dataset_args, train=False)
 
     train_dataloader = DataLoader(train_dataset, batch_size=config.train_batch_size, shuffle=True,drop_last=True)
     val_dataloader = DataLoader(val_dataset, batch_size=config.test_batch_size, shuffle=False,drop_last=True)
 
     # construct model
-    G, E, Discri, F_adv=construct_model(config)
+    G, E,Discri, F_adv=construct_model(config)
 
     # setup optimizer
     optimizer_E = torch.optim.Adam(E.parameters(), lr=E_lr_args.learning_rate, **opt_args)
@@ -148,7 +148,7 @@ def training_loop_e(
 
     l_func = lhat_Loss().cuda()
     l_feat= lpips.LPIPS(net='alex').cuda()
-    l_id=IDLoss().cuda().eval()
+    l_id=MocoLoss().cuda().eval()
     l_pix=nn.L1Loss().cuda()
     scaling_layer=ScalingLayer().cuda()
 
@@ -163,20 +163,19 @@ def training_loop_e(
             while j < D_iters and i < len(train_dataloader):
                 j += 1
                 i += 1
+                ############################
+                # (1) Update F' network
+                ############################
                 data = data_iter.next()
                 x_s = data['x_s']
                 x_t = data['x_t']
                 x_s = x_s.float().cuda(non_blocking=True)
                 x_t = x_t.float().cuda(non_blocking=True)
-                ############################
-                # (1) Update F' network
-                ############################
                 w_s = E(x_s)
                 w_t = E(x_t)
                 with torch.no_grad():
                     xrec_s, _ = G([w_s], input_is_latent=True,randomize_noise=False,return_latents=False)
                     xrec_t, _ = G([w_t], input_is_latent=True,randomize_noise=False,return_latents=False)
-
                 input_s, input_t = scaling_layer(xrec_s), scaling_layer(xrec_t)
                 feat_s,feat_s_adv=l_feat.net.forward(input_s),F_adv(input_s)
                 feat_t,feat_t_adv=l_feat.net.forward(input_t),F_adv(input_t)
@@ -207,7 +206,7 @@ def training_loop_e(
                 loss_fake = GAN_loss(x_fake, real=False)
                 loss_gp = div_loss_(Discri, x_s)
                 Discri_loss = 1 * loss_real + 1 * loss_fake + 5 * loss_gp
-
+            #
             optimizer_Discri.zero_grad()
             Discri_loss.backward()
             optimizer_Discri.step()
@@ -224,6 +223,7 @@ def training_loop_e(
 
             xrec_s, _ = G([w_s], input_is_latent=True, randomize_noise=False, return_latents=False)
             xrec_t, _ = G([w_t], input_is_latent=True, randomize_noise=False, return_latents=False)
+
             input_s, input_t = scaling_layer(xrec_s), scaling_layer(xrec_t)
             feat_s, feat_s_adv = l_feat.net.forward(input_s), F_adv(input_s)
             feat_t, feat_t_adv = l_feat.net.forward(input_t), F_adv(input_t)
@@ -275,7 +275,7 @@ def training_loop_e(
                     loss_all += torch.div(input=loss_adv, other=gradnorm_adv.detach())
 
             dst =  torch.mean(l_s) - torch.mean(phistar_gf(l_t))
-            # loss_all+=loss_dst_weight*dst
+            loss_all+=loss_dst_weight*dst
             with torch.no_grad():
                 grad_dst = \
                     torch.autograd.grad(outputs=dst, inputs=E.parameters(), create_graph=False, retain_graph=True,
@@ -327,16 +327,12 @@ def training_loop_e(
 
                         x_s = x_s.float().cuda()
                         x_t = x_t.float().cuda()
-
                         batch_size = x_t.shape[0]
-
                         w_s = E(x_s)
                         w_t = E(x_t)
-
                         xrec_s, _ = G([w_s], input_is_latent=True, randomize_noise=False, return_latents=False)
                         xrec_t, _ = G([w_t], input_is_latent=True, randomize_noise=False, return_latents=False)
                         loss_pix = torch.mean((x_s - xrec_s) ** 2)
-
                         x_all = torch.cat([x_s, xrec_s, x_t, xrec_t], dim=0)
                         image_batch = torchvision.utils.make_grid(x_all, padding=0, normalize=True, scale_each=True,
                                                                   nrow=x_s.shape[0])

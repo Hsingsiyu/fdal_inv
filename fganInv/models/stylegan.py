@@ -705,23 +705,24 @@ if __name__=='__main__':
     checkpoint = torch.load(checkpoint_path , map_location=torch.device('cpu'))
 
     Discri = Discriminator(size=512)
-    # input = torch.randn(8, 3,512,384)
-    # print(Discri(input).shape)
+    input = torch.randn(8, 3,384,512)
+    print(Discri(input).shape)
     G=Generator(size=512,style_dim=512,n_mlp=8)
-    G.load_state_dict(checkpoint["g_ema"], strict=False)
-    Discri.load_state_dict(checkpoint["d"], strict=True)
-
+    # G.load_state_dict(checkpoint["g_ema"], strict=False)
+    # Discri.load_state_dict(checkpoint["d"], strict=True)
+    #
     w_s=torch.zeros((1,512))
     x1, _ = G([w_s], input_is_latent=False, randomize_noise=True, return_latents=False)
-    x2, _ = G([w_s], input_is_latent=False, randomize_noise=True, return_latents=False)
-    x3, _ = G([w_s], input_is_latent=False, randomize_noise=False, return_latents=False)
-    x4, _ = G([w_s], input_is_latent=False, randomize_noise=False, return_latents=False)
+    print(x1.shape)
+    # x2, _ = G([w_s], input_is_latent=False, randomize_noise=True, return_latents=False)
+    # x3, _ = G([w_s], input_is_latent=False, randomize_noise=False, return_latents=False)
+    # x4, _ = G([w_s], input_is_latent=False, randomize_noise=False, return_latents=False)
 
     # print(xrec_s.shape) #[1,3,512,512]
-    import torchvision.utils as tvutils
-    with torch.no_grad():
-        tvutils.save_image(tensor=torch.cat([x1,x2,x3,x4],dim=0), fp='test_fake.png', nrow=4, normalize=True,
-                       scale_each=True)
+    # import torchvision.utils as tvutils
+    # with torch.no_grad():
+    #     tvutils.save_image(tensor=torch.cat([x1,x2,x3,x4],dim=0), fp='test_fake.png', nrow=4, normalize=True,
+    #                    scale_each=True)
     # Discri.load_state_dict(checkpoint_path["d"], strict=True)
     # for key in checkpoint.keys():
     #     print(key)

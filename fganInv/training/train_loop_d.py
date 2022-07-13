@@ -20,6 +20,7 @@ import itertools
 import random
 import torch.nn.functional as F
 import torch.autograd as autograd
+from training.ranger import Ranger
 def same_seeds(seed):
     random.seed(seed)
     torch.manual_seed(seed)
@@ -128,8 +129,8 @@ def training_loop_d(
     # construct model
     G, E, Discri, F_adv=construct_model(config)
     # setup optimizer
-    optimizer_E = torch.optim.Adam(E.parameters(), lr=E_lr_args.learning_rate, **opt_args)
-    # optimizer_E = Ranger(list(E.parameters()), lr=E_lr_args.learning_rate)
+    # optimizer_E = torch.optim.Adam(E.parameters(), lr=E_lr_args.learning_rate, **opt_args)
+    optimizer_E = Ranger(list(E.parameters()), lr=E_lr_args.learning_rate)
     optimizer_Fadv = torch.optim.SGD(F_adv.parameters(), lr=Hhat_lr_args.learning_rate,  momentum=0.9, nesterov=True)
     optimizer_Discri=torch.optim.Adam(Discri.parameters(), lr=D_lr_args.learning_rate, **opt_args)
 
@@ -336,7 +337,7 @@ def training_loop_d(
             if logger and config.local_rank==0 :
                 logger.debug(f'Epoch:{epoch:03d}, '
                              f'E_Step:{i:04d}, '
-                             f'Dlr:{optimizer_Fadv.state_dict()["param_groups"][0]["lr"]:.2e}, '
+                             f'Hlr:{optimizer_Fadv.state_dict()["param_groups"][0]["lr"]:.2e}, '
                              f'Elr:{optimizer_E.state_dict()["param_groups"][0]["lr"]:.2e}, '
                              f'Dhatlr:{optimizer_Discri.state_dict()["param_groups"][0]["lr"]:.2e}, '
                              f'{log_message}')
@@ -377,7 +378,7 @@ def training_loop_d(
                             writer.add_scalar('test/L2', loss_pix.item(), global_step=E_iterations)
             E_iterations += 1
             if (E_iterations) % E_lr_args.decay_step == 0 :
-                lr_scheduler_E.step()
+                # lr_scheduler_E.step()
                 lr_scheduler_Discri.step()
 
 
